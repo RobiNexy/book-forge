@@ -1,0 +1,5 @@
+/bookforge
+dist/
+.bookforge/
+chapters/
+_book/

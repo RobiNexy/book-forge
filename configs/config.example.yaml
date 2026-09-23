@@ -1,0 +1,15 @@
+llm:
+  provider: openai
+  model: gpt-4o-2024-11-20
+  api_key_env: OPENAI_API_KEY
+  base_url: https://api.openai.com/v1
+  temperature: 0.8
+  max_tokens: 8000
+  timeout_seconds: 300
+generation:
+  auto_mode: false
+  audit_full: true
+paths:
+  outline: outline.md
+  initial_hooks: initial-hooks.md
+  chapters_dir: chapters
