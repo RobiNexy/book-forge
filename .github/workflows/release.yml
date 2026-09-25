@@ -21,6 +21,8 @@ jobs:
             goarch: amd64
           - goos: darwin
             goarch: arm64
+          - goos: android
+            goarch: arm64
           - goos: windows
             goarch: amd64
           - goos: windows
@@ -30,12 +32,20 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
-      - name: Build
+      - name: Build and package
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
-        run: go build -trimpath -ldflags='-s -w' -o "dist/bookforge-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}" ./cmd/bookforge
+        run: |
+          mkdir -p dist
+          binary=bookforge
+          if [ "$GOOS" = "windows" ]; then
+            binary=bookforge.exe
+          fi
+          go build -trimpath -ldflags='-s -w' -o "dist/$binary" ./cmd/bookforge
+          tar -czf "dist/bookforge-${GOOS}-${GOARCH}.tar.gz" -C dist "$binary"
+          rm "dist/$binary"
       - uses: actions/upload-artifact@v4
         with:
           name: bookforge-${{ matrix.goos }}-${{ matrix.goarch }}
