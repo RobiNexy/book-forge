@@ -1,71 +1,47 @@
+// Package parser splits model output at the one protocol boundary and never interprets either block.
 package parser
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"strings"
-
-	"github.com/RobiNexy/book-forge/internal/domain"
 )
 
-type responseJSON struct {
-	Discharged []struct {
-		ID string `json:"id"`
-	} `json:"discharged"`
-	Rewritten []struct {
-		ID         string `json:"id"`
-		NewContent string `json:"new_content"`
-	} `json:"rewritten"`
-	Added []struct {
-		Type    domain.HookType `json:"type"`
-		Content string          `json:"content"`
-	} `json:"added"`
-}
+const (
+	HooksDelimiter     = "<<<BOOKFORGE_HOOKS>>>"
+	EndOfBookDelimiter = "<<<END_OF_BOOK>>>"
+)
+
+// Result contains the two opaque text blocks returned by the model.
 type Result struct {
-	Chapter string
-	Ops     domain.ChapterOps
+	Chapter   string
+	Hooks     string
+	EndOfBook bool
 }
 
-// Parse enforces the delimiter protocol and rejects unknown JSON fields.
-func Parse(raw string, n int) (Result, error) {
-	a := strings.Index(raw, "<<<CHAPTER>>>")
-	b := strings.Index(raw, "<<<HOOKS>>>")
-	e := strings.LastIndex(raw, "<<<END>>>")
-	if a < 0 || b < 0 || e < 0 || !(a < b && b < e) {
-		return Result{}, fmt.Errorf("invalid response delimiters")
+// Split accepts exactly one of the hook delimiter or end marker. It returns raw text sections,
+// validating only ambiguity and the required non-empty body/hook block.
+func Split(raw string) (Result, error) {
+	hooksCount := strings.Count(raw, HooksDelimiter)
+	endCount := strings.Count(raw, EndOfBookDelimiter)
+	if hooksCount+endCount != 1 {
+		return Result{}, fmt.Errorf("response must contain exactly one of %s or %s", HooksDelimiter, EndOfBookDelimiter)
 	}
-	chapter := strings.TrimSpace(raw[a+len("<<<CHAPTER>>>") : b])
-	payload := strings.TrimSpace(raw[b+len("<<<HOOKS>>>") : e])
-	dec := json.NewDecoder(bytes.NewBufferString(payload))
-	dec.DisallowUnknownFields()
-	var x responseJSON
-	if err := dec.Decode(&x); err != nil {
-		return Result{}, fmt.Errorf("invalid hooks JSON: %w", err)
-	}
-	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
-		return Result{}, fmt.Errorf("hooks JSON contains trailing data")
-	}
-	ops := domain.ChapterOps{N: n, Rewritten: map[string]string{}}
-	for _, h := range x.Discharged {
-		if h.ID == "" {
-			return Result{}, fmt.Errorf("discharged hook has empty id")
+	if hooksCount == 1 {
+		chapter, hooks, _ := strings.Cut(raw, HooksDelimiter)
+		if strings.TrimSpace(chapter) == "" {
+			return Result{}, fmt.Errorf("chapter text before delimiter is empty")
 		}
-		ops.Discharged = append(ops.Discharged, h.ID)
-	}
-	for _, h := range x.Rewritten {
-		if h.ID == "" {
-			return Result{}, fmt.Errorf("rewritten hook has empty id")
+		if strings.TrimSpace(hooks) == "" {
+			return Result{}, fmt.Errorf("hook text after delimiter is empty")
 		}
-		ops.Rewritten[h.ID] = h.NewContent
+		return Result{Chapter: chapter, Hooks: hooks}, nil
 	}
-	for i, h := range x.Added {
-		if h.Type == "" || h.Content == "" {
-			return Result{}, fmt.Errorf("added hook %d is incomplete", i)
-		}
-		ops.Added = append(ops.Added, domain.Hook{ID: fmt.Sprintf("h_%03d_%02d", n, i+1), Src: n, Type: h.Type, Content: h.Content})
+	chapter, trailing, _ := strings.Cut(raw, EndOfBookDelimiter)
+	if strings.TrimSpace(chapter) == "" {
+		return Result{}, fmt.Errorf("chapter text before end marker is empty")
 	}
-	return Result{Chapter: chapter, Ops: ops}, nil
+	if strings.TrimSpace(trailing) != "" {
+		return Result{}, fmt.Errorf("text after end-of-book marker is not allowed")
+	}
+	return Result{Chapter: chapter, EndOfBook: true}, nil
 }

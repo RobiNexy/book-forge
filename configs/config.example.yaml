@@ -1,15 +1,32 @@
+# BookForge project manifest. All paths are relative to this file.
+apiVersion: bookforge/v1
+
+project:
+  outline: outline.md
+  initial_hooks: initial_hooks.md
+  system_prompt: prompts/system.md
+  long_book_rules: prompts/long_book_gen.md
+  chapters_dir: chapters
+  state_dir: .bookforge
+
 llm:
   provider: openai
-  model: gpt-4o-2024-11-20
+  model: gpt-4.1
   api_key_env: OPENAI_API_KEY
   base_url: https://api.openai.com/v1
-  temperature: 0.8
-  max_tokens: 8000
-  timeout_seconds: 300
+  temperature: 0.7
+  max_output_tokens: 12000
+  request_timeout: 10m
+  # Passed through to the API request without interpretation by BookForge.
+  parameters: {}
+  # Additional HTTP headers for gateways/providers that require them.
+  headers: {}
+
 generation:
-  auto_mode: false
-  audit_full: true
-paths:
-  outline: outline.md
-  initial_hooks: initial-hooks.md
-  chapters_dir: chapters
+  review: interactive
+  store_prompt_and_response: true
+  invalid_output_retries: 3
+
+quarto:
+  project_dir: .
+  command: quarto
