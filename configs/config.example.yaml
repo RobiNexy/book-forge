@@ -24,6 +24,8 @@ llm:
 
 generation:
   review: interactive
+  # Used by the interactive chapter editor; leave empty to disable chapter editing.
+  editor: ""
   store_prompt_and_response: true
   invalid_output_retries: 3
 

@@ -36,6 +36,18 @@ func TestInitCreatesUsableProjectWithoutOverwritingFiles(t *testing.T) {
 	if err != nil || string(data) != "An existing outline with no required heading structure.\n" {
 		t.Fatalf("existing outline changed: %q, %v", data, err)
 	}
+	quarto, err := os.ReadFile(filepath.Join(dir, "_quarto.yml"))
+	if err != nil || !strings.Contains(string(quarto), "SimSun") || !strings.Contains(string(quarto), "030.qmd") {
+		t.Fatalf("built-in Quarto book template missing: %v", err)
+	}
+	index, err := os.ReadFile(filepath.Join(dir, "index.qmd"))
+	if err != nil || string(index) != "" {
+		t.Fatalf("index.qmd scaffold should be empty: %q, %v", index, err)
+	}
+	hooks, err := os.ReadFile(filepath.Join(dir, "initial_hooks.md"))
+	if err != nil || string(hooks) != "" {
+		t.Fatalf("initial_hooks.md scaffold should be empty: %q, %v", hooks, err)
+	}
 }
 
 func TestLoadProjectKeepsHumanMarkdownInputsOpaque(t *testing.T) {
@@ -80,20 +92,77 @@ func TestValidateRejectsChangedInputsAfterInitialization(t *testing.T) {
 	}
 }
 
-func TestQuartoReferencesIgnoresCommentsAndAcceptsConfiguredGlob(t *testing.T) {
+func TestUpdateQuartoChapterListPreservesCustomEntriesAndUsesProjectPaths(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "_quarto.yml")
+	data := []byte("project:\n  type: book\nbook:\n  chapters:\n    - index.qmd\n    - 001.qmd\n    - appendix.qmd\n")
+	if err := os.WriteFile(file, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	chaptersDir := filepath.Join(dir, "chapters")
+	if err := updateQuartoChapterList(file, dir, chaptersDir, []int{1, 2}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var document yaml.Node
-	if err := yaml.Unmarshal([]byte("project:\n  type: book\nbook:\n  chapters:\n    - index.qmd\n    - chapters/*.qmd\n# chapters/01.qmd is only a comment\n"), &document); err != nil {
+	if err := yaml.Unmarshal(updated, &document); err != nil {
 		t.Fatal(err)
 	}
-	if !quartoReferences(&document, []string{"chapters/01.qmd", "chapters/*.qmd"}) {
-		t.Fatal("expected explicit chapter wildcard reference")
+	book := mappingValue(document.Content[0], "book")
+	list := mappingValue(book, "chapters")
+	var entries []string
+	for _, node := range list.Content {
+		entries = append(entries, node.Value)
 	}
+	want := []string{"index.qmd", "appendix.qmd", "chapters/001.qmd", "chapters/002.qmd"}
+	if strings.Join(entries, "|") != strings.Join(want, "|") {
+		t.Fatalf("chapter list = %v, want %v", entries, want)
+	}
+}
 
-	if err := yaml.Unmarshal([]byte("project:\n  type: book\n# chapters/01.qmd\n"), &document); err != nil {
+func TestForgeUpdatesChaptersAndRunsAbsoluteQuartoCommand(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "book")
+	if err := Init(dir); err != nil {
 		t.Fatal(err)
 	}
-	if quartoReferences(&document, []string{"chapters/01.qmd"}) {
-		t.Fatal("comment must not count as a chapter reference")
+	p, err := loadProject(filepath.Join(dir, "bookforge.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.store.Initialize(domain.ProjectState{CurrentHooks: p.initialHooks}, p.inputs); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.store.CommitGeneration(1, "chapter one", domain.ProjectState{CurrentHooks: "hooks"}, store.AuditRecord{Generation: 1}, "", "", false); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(dir, "quarto-called")
+	command := filepath.Join(dir, "quarto")
+	script := "#!/bin/sh\nprintf '%s' \"$1\" > \"" + marker + "\"\n"
+	if err := os.WriteFile(command, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configFile := filepath.Join(dir, "bookforge.yaml")
+	configData, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configText := strings.Replace(string(configData), "command: quarto", "command: "+command, 1)
+	if err := os.WriteFile(configFile, []byte(configText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Forge(context.Background(), configFile); err != nil {
+		t.Fatal(err)
+	}
+	called, err := os.ReadFile(marker)
+	if err != nil || string(called) != "render" {
+		t.Fatalf("configured Quarto command was not run: %q, %v", called, err)
+	}
+	quarto, err := os.ReadFile(filepath.Join(dir, "_quarto.yml"))
+	if err != nil || !strings.Contains(string(quarto), "chapters/001.qmd") || strings.Contains(string(quarto), "    - 001.qmd") {
+		t.Fatalf("generated chapter list was not synchronized: %v", err)
 	}
 }
 

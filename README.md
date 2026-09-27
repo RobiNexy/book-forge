@@ -28,6 +28,8 @@ go build -o ./bookforge ./cmd/bookforge
 ```text
 my-book/
 ├── bookforge.yaml
+├── _quarto.yml
+├── index.qmd
 ├── outline.md
 ├── initial_hooks.md
 ├── prompts/
@@ -66,7 +68,7 @@ Continuity note: the protagonist's sister disappeared three years ago.
 
 ### Configure Quarto
 
-BookForge does not create or edit `quarto.yml`, templates, or PDF layout settings. The user's Quarto book must list the generated files. For example, after three chapters have been generated, add them to the existing `quarto.yml` or `_quarto.yml`:
+`init` provides a built-in `_quarto.yml` PDF book template and an example `index.qmd`; existing files are never overwritten. The template includes Chinese fonts, math packages, page dimensions, and table-of-contents settings. After generating chapters, run `forge` to synchronize `book.chapters` and invoke the configured Quarto command:
 
 ```yaml
 project:
@@ -84,7 +86,7 @@ format:
   pdf: default
 ```
 
-Create `index.qmd` and maintain the chapter list yourself. BookForge checks that Quarto references every generated chapter before rendering.
+Chapter files use three-digit sequence numbers and are not named from outline headings. `forge` preserves `index.qmd` and other non-numbered chapter entries while updating numbered entries to match generated chapters, then compiles the PDF in one step.
 
 ## Generate until the book is complete
 
@@ -92,10 +94,9 @@ Commands default to the current directory. Select a project with `--project DIR`
 
 ```sh
 ./bookforge --project ./my-book validate
-./bookforge --project ./my-book plan
 ```
 
-`validate` checks that configuration and source files are readable and existing state is consistent. It does not infer outline chapters or hook meaning. `plan` previews the next numbered output file.
+`validate` checks that configuration and source files are readable and existing state is consistent. It does not infer outline chapters or hook meaning.
 
 Set the environment variable named by `llm.api_key_env` (default `OPENAI_API_KEY`), then start generation:
 
@@ -119,15 +120,15 @@ Final chapter prose...
 <<<END_OF_BOOK>>>
 ```
 
-The markers are mutually exclusive. Missing, repeated, or conflicting markers, or an empty chapter, make a response invalid. BookForge retries invalid output three times by default (four requests total); configure `generation.invalid_output_retries` to change the number of additional retries. Every invalid response is displayed and saved under `.bookforge/invalid-responses/`; exhausting retries fails without committing the chapter or state. Invalid responses are retained even when full prompt/response auditing is disabled. The hook text is opaque and replaces the previous hook state; it is never automatically appended to prior hook blocks.
+The markers are mutually exclusive. Missing, repeated, or conflicting markers, or an empty chapter, make a response invalid. BookForge retries invalid output three times by default (four requests total); configure `generation.invalid_output_retries` to change the number of additional retries. Retry requests after a format error temporarily include a “please pay attention to the format” reminder; it is removed once that chapter is committed. Every invalid response is displayed and saved under `.bookforge/invalid-responses/`; exhausting retries fails without committing the chapter or state. Invalid responses are retained even when full prompt/response auditing is disabled. The hook text is opaque and replaces the previous hook state; it is never automatically appended to prior hook blocks.
 
-Interactive review is the default:
+Interactive review is the default. Invalid input, including blank lines and whitespace, displays a prompt and keeps the review active:
 
 - `a` — approve and commit;
 - `A` — approve and automatically approve the rest of this run;
 - `v` — view the complete chapter and next hook text;
-- `e` — edit the chapter with `$EDITOR`, then confirm the edit;
-- `r` — request a replacement response;
+- `e` — edit the chapter with the configured editor, then confirm the edit;
+- `r` — enter an optional revision comment and request a replacement; the comment applies only to the current chapter and is removed after it is committed;
 - `q` — quit without committing the current chapter.
 
 Use `--auto` to skip review. Generation still validates markers and commits each chapter before requesting the next one:
@@ -140,20 +141,19 @@ The console shows each request and, after commit, a formatted chapter summary wi
 
 There is no generation-count limit. BookForge continues until `<<<END_OF_BOOK>>>` is committed. If interrupted, run `generate` again to resume from the latest complete chapter and hook snapshot. If the final marker was committed, it reports that the book is complete and exits.
 
-## Rewrite, inspect, and render
+## Rewrite, inspect, and compile
 
 ```sh
-./bookforge --project ./my-book status
 ./bookforge --project ./my-book log
 ./bookforge --project ./my-book hooks show
 ./bookforge --project ./my-book hooks show 2
 ./bookforge --project ./my-book rewrite 5
 ./bookforge --project ./my-book rewrite 5 --auto
 ./bookforge --project ./my-book clear
-./bookforge --project ./my-book render
+./bookforge --project ./my-book forge
 ```
 
-`rewrite N` first displays the resolved chapter file and asks for confirmation. It then archives generation N and every later chapter, snapshot, audit, and completion marker; restores the state after generation N−1; and generates until the model returns the end marker. `status` prints the chapter-to-file mapping, commit status, and completion state as JSON. `log` prints the JSONL operation history. `hooks show [N]` prints the uninterpreted hook snapshot after generation N; with no N it displays the latest state. `clear` lists generated files and state and asks for confirmation before removing only BookForge-managed artifacts. It preserves source text, prompts, `bookforge.yaml`, Quarto files, and unrecognized files; a fresh log entry records that the clear completed.
+`rewrite N` first displays the resolved chapter file and asks for confirmation. It then archives generation N and every later chapter, snapshot, audit, and completion marker; restores the state after generation N−1; and generates until the model returns the end marker. `log` prints the JSONL operation history. `hooks show [N]` prints the uninterpreted hook snapshot after generation N; with no N it displays the latest state. `clear` lists generated files and state and asks for confirmation before removing only BookForge-managed artifacts. It preserves source text, prompts, `bookforge.yaml`, Quarto files, and unrecognized files; a fresh log entry records that the clear completed. `forge` is the single command that synchronizes the chapter list and compiles the PDF.
 
 If `outline.md`, `initial_hooks.md`, `prompts/system.md`, or `prompts/long_book_gen.md` changes after generation starts, normal continuation is rejected. Use `rewrite 1` to archive the old chain, reset the initial hooks from the edited file, and generate again.
 
@@ -176,9 +176,10 @@ If `outline.md`, `initial_hooks.md`, `prompts/system.md`, or `prompts/long_book_
 | `llm.parameters` | Arbitrary model API fields passed through as-is | `{}` |
 | `llm.headers` | Additional HTTP request headers | `{}` |
 | `generation.review` | `interactive` or `auto` | `interactive` |
+| `generation.editor` | Editor command for chapter edits; if unset, editing reports an error and returns to review | empty |
 | `generation.store_prompt_and_response` | Save full prompt and raw response in audit | `true` |
 | `generation.invalid_output_retries` | Additional retries after an invalid response | `3` |
-| `quarto.project_dir` / `quarto.command` | Quarto working directory and executable | `.`, `quarto` |
+| `quarto.project_dir` / `quarto.command` | Quarto working directory and executable (PATH command or absolute path) | `.`, `quarto` |
 
 CLI options `--auto`, `--model`, and `--no-audit-full` apply only to that run. `llm.parameters` keys and values are merged into the API request without BookForge interpreting their meaning; unsupported parameters are reported with the server's error response. API keys are never persisted. JSON snapshots and audit records are tool-managed; users do not need to write JSON.
 
@@ -207,7 +208,7 @@ Headers are forwarded as configured; a custom header with the same name as a def
 - `.bookforge/manifest.json` stores source hashes, not a generation counter.
 - `.bookforge/snapshots/state_000.json` stores initial hooks. `state_NNN.json` stores the current opaque hook text and the end-of-book flag.
 - `.bookforge/audit/run_NNN.json` stores per-generation metadata and optionally the full prompt and raw response.
-- `.bookforge/invalid-responses/` retains malformed model responses for diagnosis regardless of the full-audit setting; `.bookforge/log.jsonl` records generation, review, retry, rewrite, clear, and render operations.
+- `.bookforge/invalid-responses/` retains malformed model responses for diagnosis regardless of the full-audit setting; `.bookforge/log.jsonl` records generation, review, retry, rewrite, clear, and forge operations.
 - `chapters/NNN.qmd`, the snapshot, and audit file together identify a committed generation. The next sequence is inferred from the contiguous artifacts.
 - `<<<END_OF_BOOK>>>` is the sole completion condition and is persisted in the final snapshot.
 - A project lock prevents concurrent generation or rendering in the same local project.

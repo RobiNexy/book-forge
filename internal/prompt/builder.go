@@ -12,8 +12,11 @@ const protocol = `固定输出协议：每次只能输出一章。非最后一�
 
 // Build emits three system instruction sections and one user message. Outline and hook bytes
 // remain unchanged within their labeled sections; generation sequence is deliberately omitted.
-func Build(style, longBookRules, outline, currentHooks string) []llm.Message {
+func Build(style, longBookRules, outline, currentHooks string, additionalInstructions ...string) []llm.Message {
 	system := strings.Join([]string{style, longBookRules, protocol}, "\n\n")
 	user := "以下是一份大纲：\n" + outline + "\n\n以下是前次输出章节的钩子：\n" + currentHooks + "\n\n按要求输出并只输出一章新章节。"
+	if len(additionalInstructions) > 0 {
+		user += "\n\n本次生成的补充要求：\n" + strings.Join(additionalInstructions, "\n")
+	}
 	return []llm.Message{{Role: "system", Content: system}, {Role: "user", Content: user}}
 }

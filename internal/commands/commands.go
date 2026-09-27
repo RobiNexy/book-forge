@@ -4,7 +4,6 @@ package commands
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -36,6 +35,9 @@ type project struct {
 
 //go:embed long_book_gen.md
 var defaultLongBookRules []byte
+
+//go:embed quarto-book-template.yml
+var quartoBookTemplate []byte
 
 // Init creates a project scaffold without replacing existing human-maintained files.
 func Init(dir string) error {
@@ -72,6 +74,7 @@ llm:
   headers: {}
 generation:
   review: interactive
+  editor: ""
   store_prompt_and_response: true
   invalid_output_retries: 3
 quarto:
@@ -80,6 +83,8 @@ quarto:
 `,
 		"outline.md":               "# Add your complete outline here\n",
 		"initial_hooks.md":         "",
+		"index.qmd":                "",
+		"_quarto.yml":              string(quartoBookTemplate),
 		"prompts/system.md":        "You are a thoughtful book author. Follow the project owner's writing instructions and maintain continuity.\n",
 		"prompts/long_book_gen.md": string(defaultLongBookRules),
 		".gitignore":               ".bookforge/audit/\n.bookforge/invalid-responses/\n.bookforge/log.jsonl\n.bookforge/lock\n.bookforge/archive/\n_book/\n",
@@ -164,33 +169,6 @@ func validateLoadedState(p project) error {
 	return nil
 }
 
-// Plan previews the next numbered file without calling the model.
-func Plan(configPath string) error {
-	p, err := loadProject(configPath)
-	if err != nil {
-		return err
-	}
-	if err := validateLoadedState(p); err != nil {
-		return err
-	}
-	next, err := p.store.NextGeneration()
-	state := domain.ProjectState{CurrentHooks: p.initialHooks}
-	if errors.Is(err, os.ErrNotExist) {
-		next, err = 1, nil
-	} else if err == nil {
-		state, err = p.store.LoadSnapshot(next - 1)
-	}
-	if err != nil {
-		return err
-	}
-	if state.Finished {
-		fmt.Fprintln(os.Stdout, "The book is already complete.")
-		return nil
-	}
-	fmt.Fprintf(os.Stdout, "next generation: %03d.qmd\n", next)
-	return nil
-}
-
 // Generate runs sequentially until the model marks the final chapter.
 func Generate(ctx context.Context, configPath string, auto bool, noAudit bool, model string) error {
 	p, err := loadProject(configPath)
@@ -219,7 +197,7 @@ func runGenerate(ctx context.Context, p project, auto bool, noAudit bool, model 
 			Parameters: p.config.LLM.Parameters, AuditFull: p.config.Generation.StorePromptAndResponse,
 			InvalidOutputRetries: p.config.Generation.InvalidOutputRetries, Auto: p.config.Generation.Review == "auto",
 			InitialHooks: p.initialHooks, SystemPrompt: p.system, LongBookRules: p.longBookRules, Inputs: p.inputs,
-			Output: os.Stderr, Editor: os.Getenv("EDITOR"), LockHeld: lockHeld,
+			Output: os.Stderr, Editor: p.config.Generation.Editor, LockHeld: lockHeld,
 		},
 	}).Generate(ctx)
 }
@@ -314,38 +292,6 @@ func RewriteWithIO(ctx context.Context, configPath string, generation int, auto 
 	}
 	appendLog(p.store, output, store.LogEntry{Action: "rewrite", Generation: generation, Result: "invalidated", Details: map[string]any{"chapter_path": chapterPath, "before": before, "after": after}})
 	return runGenerate(ctx, p, auto, false, "", true)
-}
-
-// Status emits recognized numbered files, commit state, and whole-book completion state.
-func Status(configPath string) error {
-	p, err := loadProject(configPath)
-	if err != nil {
-		return err
-	}
-	next, err := p.store.NextGeneration()
-	state := domain.ProjectState{CurrentHooks: p.initialHooks}
-	if errors.Is(err, os.ErrNotExist) {
-		next, err = 1, nil
-	} else if err == nil {
-		state, err = p.store.LoadSnapshot(next - 1)
-	}
-	if err != nil {
-		return err
-	}
-	chapters, err := p.store.GenerationStatuses()
-	if err != nil {
-		return err
-	}
-	output := map[string]any{
-		"latest_generation": next - 1, "next_generation": next, "finished": state.Finished,
-		"current_hooks_characters": len(state.CurrentHooks), "chapters": chapters,
-	}
-	b, err := json.MarshalIndent(output, "", "  ")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(os.Stdout, string(b))
-	return err
 }
 
 // Log prints the append-only JSONL operation history.
@@ -443,8 +389,8 @@ func Hooks(configPath string, generation int) error {
 	return err
 }
 
-// Render validates generation state and Quarto inclusion before invoking the configured command.
-func Render(ctx context.Context, configPath string) (renderErr error) {
+// Forge synchronizes generated chapter paths into the Quarto book and compiles the PDF.
+func Forge(ctx context.Context, configPath string) (forgeErr error) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return err
@@ -455,26 +401,16 @@ func Render(ctx context.Context, configPath string) (renderErr error) {
 		return err
 	}
 	defer release()
-	appendLog(state, os.Stderr, store.LogEntry{Action: "render", Result: "started", Details: map[string]any{"project_dir": cfg.Quarto.ProjectDir}})
+	appendLog(state, os.Stderr, store.LogEntry{Action: "forge", Result: "started", Details: map[string]any{"project_dir": cfg.Quarto.ProjectDir}})
 	defer func() {
 		result, message := "completed", ""
-		if renderErr != nil {
-			result, message = "failed", renderErr.Error()
+		if forgeErr != nil {
+			result, message = "failed", forgeErr.Error()
 		}
-		appendLog(state, os.Stderr, store.LogEntry{Action: "render", Result: result, Error: message})
+		appendLog(state, os.Stderr, store.LogEntry{Action: "forge", Result: result, Error: message})
 	}()
 	if err := state.ValidateState(); err != nil {
 		return fmt.Errorf("validate generated project state: %w", err)
-	}
-	if _, err := exec.LookPath(cfg.Quarto.Command); err != nil {
-		return fmt.Errorf("Quarto command %q not found: %w", cfg.Quarto.Command, err)
-	}
-	projectConfig := filepath.Join(cfg.Quarto.ProjectDir, "quarto.yml")
-	if _, err := os.Stat(projectConfig); err != nil {
-		projectConfig = filepath.Join(cfg.Quarto.ProjectDir, "_quarto.yml")
-		if _, altErr := os.Stat(projectConfig); altErr != nil {
-			return fmt.Errorf("Quarto project configuration not found in %s", cfg.Quarto.ProjectDir)
-		}
 	}
 	chapters, err := state.Chapters()
 	if err != nil {
@@ -483,64 +419,120 @@ func Render(ctx context.Context, configPath string) (renderErr error) {
 	if len(chapters) == 0 {
 		return fmt.Errorf("no generated .qmd chapters in %s", cfg.Project.ChaptersDir)
 	}
-	b, err := os.ReadFile(projectConfig)
+	projectConfig, err := quartoProjectConfig(cfg.Quarto.ProjectDir)
 	if err != nil {
 		return err
 	}
-	var document yaml.Node
-	if err := yaml.Unmarshal(b, &document); err != nil {
-		return fmt.Errorf("parse Quarto project configuration: %w", err)
+	if err := updateQuartoChapterList(projectConfig, cfg.Quarto.ProjectDir, cfg.Project.ChaptersDir, chapters); err != nil {
+		return err
 	}
-	for _, generation := range chapters {
-		name := fmt.Sprintf("%03d.qmd", generation)
-		chapterPath := filepath.Join(cfg.Project.ChaptersDir, name)
-		relative, err := filepath.Rel(cfg.Quarto.ProjectDir, chapterPath)
-		if err != nil {
-			return err
-		}
-		relative = filepath.ToSlash(relative)
-		dir := filepath.ToSlash(filepath.Dir(relative))
-		patterns := []string{relative, name, filepath.ToSlash(filepath.Join(dir, "*.qmd"))}
-		if dir == "." {
-			patterns = append(patterns, "*.qmd")
-		}
-		if !quartoReferences(&document, patterns) {
-			return fmt.Errorf("Quarto project does not reference generated chapter %q", name)
-		}
+	if _, err := exec.LookPath(cfg.Quarto.Command); err != nil {
+		return fmt.Errorf("Quarto command %q not found: %w", cfg.Quarto.Command, err)
 	}
 	return render.QuartoCommand(ctx, cfg.Quarto.ProjectDir, cfg.Quarto.Command)
 }
 
-func quartoReferences(document *yaml.Node, patterns []string) bool {
-	wanted := make(map[string]bool, len(patterns))
-	for _, pattern := range patterns {
-		wanted[path.Clean(strings.TrimPrefix(filepath.ToSlash(pattern), "./"))] = true
+func quartoProjectConfig(projectDir string) (string, error) {
+	for _, name := range []string{"_quarto.yml", "quarto.yml"} {
+		file := filepath.Join(projectDir, name)
+		if _, err := os.Stat(file); err == nil {
+			return file, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
 	}
-	visited := make(map[*yaml.Node]bool)
-	var visit func(*yaml.Node) bool
-	visit = func(node *yaml.Node) bool {
-		if node == nil || visited[node] {
-			return false
+	return "", fmt.Errorf("Quarto project configuration not found in %s", projectDir)
+}
+
+func updateQuartoChapterList(file, projectDir, chaptersDir string, generations []int) error {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return fmt.Errorf("parse Quarto project configuration: %w", err)
+	}
+	if document.Kind != yaml.DocumentNode || len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
+		return fmt.Errorf("Quarto project configuration must be a YAML mapping")
+	}
+	root := document.Content[0]
+	book := mappingValue(root, "book")
+	if book == nil {
+		book = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{}}
+		root.Content = append(root.Content, scalarNode("book"), book)
+	}
+	chapters := mappingValue(book, "chapters")
+	if chapters == nil {
+		chapters = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		book.Content = append(book.Content, scalarNode("chapters"), chapters)
+	} else if chapters.Kind != yaml.SequenceNode {
+		return fmt.Errorf("Quarto book.chapters must be a list")
+	}
+
+	kept := make([]*yaml.Node, 0, len(chapters.Content)+len(generations))
+	seen := make(map[string]bool)
+	for _, node := range chapters.Content {
+		if node.Kind == yaml.ScalarNode && numberedQMD(node.Value) {
+			continue
 		}
-		visited[node] = true
+		kept = append(kept, node)
 		if node.Kind == yaml.ScalarNode {
-			for _, field := range strings.Fields(node.Value) {
-				field = strings.Trim(field, `\"',[]`)
-				field = path.Clean(strings.TrimPrefix(field, "./"))
-				if wanted[field] {
-					return true
-				}
-			}
+			seen[path.Clean(filepath.ToSlash(node.Value))] = true
 		}
-		if node.Alias != nil && visit(node.Alias) {
-			return true
+	}
+	chapters.Content = kept
+	for _, generation := range generations {
+		name := fmt.Sprintf("%03d.qmd", generation)
+		chapterFile := filepath.Join(chaptersDir, name)
+		relative, err := filepath.Rel(projectDir, chapterFile)
+		if err != nil {
+			return err
 		}
-		for _, child := range node.Content {
-			if visit(child) {
-				return true
-			}
+		relative = filepath.ToSlash(relative)
+		clean := path.Clean(strings.TrimPrefix(relative, "./"))
+		if seen[clean] {
+			continue
 		}
+		chapters.Content = append(chapters.Content, scalarNode(relative))
+		seen[clean] = true
+	}
+	updated, err := yaml.Marshal(&document)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(file, updated, 0o644)
+}
+
+func mappingValue(mapping *yaml.Node, key string) *yaml.Node {
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func scalarNode(value string) *yaml.Node {
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+}
+
+func numberedQMD(value string) bool {
+	base := path.Base(filepath.ToSlash(value))
+	if !strings.HasSuffix(base, ".qmd") {
 		return false
 	}
-	return visit(document)
+	number := strings.TrimSuffix(base, ".qmd")
+	if len(number) != 3 {
+		return false
+	}
+	for _, digit := range number {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
 }

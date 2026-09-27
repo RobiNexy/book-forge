@@ -57,13 +57,6 @@ func run(args []string) int {
 		if err := commands.Validate(configPath); err != nil {
 			return report(err, classify(err))
 		}
-	case "plan":
-		if len(args) != 0 {
-			return report(fmt.Errorf("plan accepts no arguments"), 64)
-		}
-		if err := commands.Plan(configPath); err != nil {
-			return report(err, classify(err))
-		}
 	case "generate", "gen":
 		fs := flag.NewFlagSet("generate", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -85,13 +78,6 @@ func run(args []string) int {
 			return report(err, 64)
 		}
 		if err := commands.Rewrite(ctx, configPath, generation, auto); err != nil {
-			return report(err, classify(err))
-		}
-	case "status":
-		if len(args) != 0 {
-			return report(fmt.Errorf("status accepts no arguments"), 64)
-		}
-		if err := commands.Status(configPath); err != nil {
 			return report(err, classify(err))
 		}
 	case "log":
@@ -122,11 +108,11 @@ func run(args []string) int {
 		if err := commands.Hooks(configPath, generation); err != nil {
 			return report(err, classify(err))
 		}
-	case "render":
+	case "forge":
 		if len(args) != 0 {
-			return report(fmt.Errorf("render accepts no arguments"), 64)
+			return report(fmt.Errorf("forge accepts no arguments"), 64)
 		}
-		if err := commands.Render(ctx, configPath); err != nil {
+		if err := commands.Forge(ctx, configPath); err != nil {
 			return report(err, classify(err))
 		}
 	case "help", "--help", "-h":
@@ -219,14 +205,12 @@ func printUsage(w *os.File) {
 Commands:
   init [dir]                create a project scaffold
   validate                  check config and readable text inputs
-  plan                      preview the next numbered output file
   generate [--auto]         generate until the end-of-book marker
   rewrite N [--auto]        cascade rewrite from generation N to the end marker
-  status                    print progress and completion state as JSON
   log                       print operation history
   hooks show [N]            print an opaque hook snapshot
   clear                     remove BookForge-generated data after confirmation
-  render                    invoke the configured Quarto project
+  forge                     synchronize chapters and compile the Quarto book (PDF)
 
 Global options: --project DIR, --config FILE`)
 }

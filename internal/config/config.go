@@ -37,6 +37,7 @@ type Config struct {
 	} `yaml:"llm"`
 	Generation struct {
 		Review                 string `yaml:"review"`
+		Editor                 string `yaml:"editor"`
 		StorePromptAndResponse bool   `yaml:"store_prompt_and_response"`
 		InvalidOutputRetries   int    `yaml:"invalid_output_retries"`
 	} `yaml:"generation"`

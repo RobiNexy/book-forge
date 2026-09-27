@@ -83,13 +83,15 @@ func TestGenerateRunsUntilEndMarkerWithOpaqueState(t *testing.T) {
 
 type scriptedLLM struct {
 	responses []string
+	requests  []llm.Request
 	calls     int
 }
 
-func (f *scriptedLLM) Complete(_ context.Context, _ llm.Request) (llm.Response, error) {
+func (f *scriptedLLM) Complete(_ context.Context, req llm.Request) (llm.Response, error) {
 	if f.calls >= len(f.responses) {
 		return llm.Response{}, fmt.Errorf("unexpected extra model request")
 	}
+	f.requests = append(f.requests, req)
 	content := f.responses[f.calls]
 	f.calls++
 	return llm.Response{Content: content}, nil
@@ -197,6 +199,80 @@ func TestAcceptAllAppliesOnlyToCurrentRun(t *testing.T) {
 		if err != nil || !strings.Contains(string(data), `"reviewed_by": "`+want+`"`) {
 			t.Errorf("generation %d reviewed_by want %s: %v", generation, want, err)
 		}
+	}
+}
+
+func TestInvalidReviewLinesRetryAndRegenerationCommentIsTemporary(t *testing.T) {
+	root := t.TempDir()
+	client := &scriptedLLM{responses: []string{
+		"first draft\n<<<BOOKFORGE_HOOKS>>>\nnext",
+		"revised draft\n<<<BOOKFORGE_HOOKS>>>\nnext",
+		"final draft\n<<<END_OF_BOOK>>>\n",
+	}}
+	var output bytes.Buffer
+	o := &Orchestrator{
+		LLM: client, Store: store.New(root), Outline: "outline",
+		Options: Options{Model: "test", Input: strings.NewReader("  \n\ninvalid\nr\n把论证顺序调整一下\na\na\n"), Output: &output,
+			InitialHooks: "hooks", SystemPrompt: "style", LongBookRules: "rules",
+			Inputs: store.InputHashes{Outline: "o", InitialHooks: "h", SystemPrompt: "s", LongBookRules: "l"}},
+	}
+	if err := o.Generate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if client.calls != 3 {
+		t.Fatalf("model calls = %d, want 3", client.calls)
+	}
+	if strings.Contains(client.requests[0].Messages[1].Content, "把论证顺序调整一下") {
+		t.Fatal("regeneration comment leaked into original request")
+	}
+	if !strings.Contains(client.requests[1].Messages[1].Content, "把论证顺序调整一下") {
+		t.Fatal("regeneration comment was not included in retry")
+	}
+	if strings.Contains(client.requests[2].Messages[1].Content, "把论证顺序调整一下") {
+		t.Fatal("regeneration comment leaked into the next chapter")
+	}
+	for _, value := range []string{"无效输入", "请简要说明需要修改的问题"} {
+		if !strings.Contains(output.String(), value) {
+			t.Errorf("review output missing %q: %s", value, output.String())
+		}
+	}
+}
+
+func TestFormatReminderIsOnlySentOnRetryUntilChapterPasses(t *testing.T) {
+	client := &scriptedLLM{responses: []string{
+		"malformed response",
+		"chapter one\n<<<BOOKFORGE_HOOKS>>>\nhooks",
+		"chapter two\n<<<END_OF_BOOK>>>\n",
+	}}
+	o := &Orchestrator{
+		LLM: client, Store: store.New(t.TempDir()), Outline: "outline",
+		Options: Options{Model: "test", Input: strings.NewReader("a\na\n"),
+			InitialHooks: "hooks", SystemPrompt: "style", LongBookRules: "rules", InvalidOutputRetries: 1,
+			Inputs: store.InputHashes{Outline: "o", InitialHooks: "h", SystemPrompt: "s", LongBookRules: "l"}},
+	}
+	if err := o.Generate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(client.requests[0].Messages[1].Content, "请注意格式") {
+		t.Fatal("format reminder appeared before a format error")
+	}
+	if !strings.Contains(client.requests[1].Messages[1].Content, "请注意格式") {
+		t.Fatal("format reminder missing from retry")
+	}
+	if strings.Contains(client.requests[2].Messages[1].Content, "请注意格式") {
+		t.Fatal("format reminder leaked after chapter one was committed")
+	}
+}
+
+func TestMissingEditorReportsErrorAndKeepsReviewActive(t *testing.T) {
+	var output bytes.Buffer
+	o := &Orchestrator{Options: Options{Input: strings.NewReader("e\n \nq\n"), Output: &output}}
+	choice, _, _, err := o.review(1, "chapter", "", false)
+	if err != nil || choice != "q" {
+		t.Fatalf("review result choice=%q err=%v", choice, err)
+	}
+	if !strings.Contains(output.String(), "generation.editor") || !strings.Contains(output.String(), "无效输入") {
+		t.Fatalf("editor error or continued review missing: %q", output.String())
 	}
 }
 

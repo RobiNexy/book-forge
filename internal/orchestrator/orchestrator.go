@@ -2,6 +2,7 @@
 package orchestrator
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -60,10 +61,11 @@ type Options struct {
 
 // Orchestrator sends opaque inputs to the model and commits each valid split as a new state.
 type Orchestrator struct {
-	LLM     llm.Client
-	Store   Store
-	Outline string
-	Options Options
+	LLM          llm.Client
+	Store        Store
+	Outline      string
+	Options      Options
+	inputScanner *bufio.Scanner
 }
 
 // Generate resumes the artifact-derived sequence and continues until END_OF_BOOK is committed.
@@ -142,20 +144,22 @@ func (o *Orchestrator) generateOne(ctx context.Context, generation int, previous
 	if o.LLM == nil {
 		return domain.ProjectState{}, false, false, fmt.Errorf("LLM client is required")
 	}
-	messages := prompt.Build(o.Options.SystemPrompt, o.Options.LongBookRules, o.Outline, previous.CurrentHooks)
-	promptBytes, err := json.MarshalIndent(messages, "", "  ")
-	if err != nil {
-		return domain.ProjectState{}, false, false, err
-	}
 	started := time.Now().UTC()
 	if o.Options.StartedAt != nil {
 		started = o.Options.StartedAt().UTC()
 	}
 	requestAttempt, invalidCount := 0, 0
+	var retryInstructions []string
+	formatReminderAdded := false
 	runID := fmt.Sprintf("%d-%d", started.UnixNano(), os.Getpid())
 	for {
 		requestAttempt++
 		writeGenerationRequest(o.output(), generation, requestAttempt, o.Options.InvalidOutputRetries, o.Options.Model)
+		messages := prompt.Build(o.Options.SystemPrompt, o.Options.LongBookRules, o.Outline, previous.CurrentHooks, retryInstructions...)
+		promptBytes, err := json.MarshalIndent(messages, "", "  ")
+		if err != nil {
+			return domain.ProjectState{}, false, false, err
+		}
 		response, err := o.LLM.Complete(ctx, llm.Request{Model: o.Options.Model, Messages: messages, Temperature: o.Options.Temperature, MaxTokens: o.Options.MaxTokens, Parameters: o.Options.Parameters})
 		if err != nil {
 			failure := fmt.Errorf("generate chapter %d: %w", generation, err)
@@ -171,6 +175,10 @@ func (o *Orchestrator) generateOne(ctx context.Context, generation int, previous
 			}
 			writeInvalidResponse(o.output(), generation, requestAttempt, responsePath, response.Content)
 			if invalidCount <= o.Options.InvalidOutputRetries {
+				if !formatReminderAdded {
+					retryInstructions = append(retryInstructions, "请注意格式：严格遵守固定输出协议，只输出一章，并使用正确且唯一的结束标记(`<<<BOOKFORGE_HOOKS>>>`或`<<<END_OF_BOOK>>>`)。")
+					formatReminderAdded = true
+				}
 				o.logEvent("retry", generation, "invalid_output", err, map[string]any{"attempt": requestAttempt, "response_file": responsePath})
 				continue
 			}
@@ -181,13 +189,16 @@ func (o *Orchestrator) generateOne(ctx context.Context, generation int, previous
 		chapter := blocks.Chapter
 		acceptAll := false
 		if !autoReview {
-			choice, edited, err := o.review(generation, chapter, blocks.Hooks, blocks.EndOfBook)
+			choice, edited, comment, err := o.review(generation, chapter, blocks.Hooks, blocks.EndOfBook)
 			if err != nil {
 				o.logEvent("review", generation, "error", err, nil)
 				return domain.ProjectState{}, false, false, err
 			}
 			if choice == "r" {
 				invalidCount = 0
+				if strings.TrimSpace(comment) != "" {
+					retryInstructions = append(retryInstructions, "用户针对上一版的修改意见：\n```\n"+strings.TrimSpace(comment)+"\n``` \n请照此意见修改。")
+				}
 				o.logEvent("retry", generation, "reviewer_requested_regeneration", nil, map[string]any{"attempt": requestAttempt})
 				continue
 			}
@@ -231,11 +242,7 @@ func (o *Orchestrator) generateOne(ctx context.Context, generation int, previous
 	}
 }
 
-func (o *Orchestrator) review(generation int, chapter, hooks string, endOfBook bool) (string, string, error) {
-	input := o.Options.Input
-	if input == nil {
-		input = os.Stdin
-	}
+func (o *Orchestrator) review(generation int, chapter, hooks string, endOfBook bool) (string, string, string, error) {
 	out := o.output()
 	fmt.Fprintf(out, "Chapter %d: %d characters\n", generation, len(chapter))
 	if endOfBook {
@@ -243,57 +250,85 @@ func (o *Orchestrator) review(generation int, chapter, hooks string, endOfBook b
 	} else {
 		fmt.Fprintf(out, "Next hook state: %d characters\n", len(hooks))
 	}
-	fmt.Fprint(out, "[a]ccept, [A]ccept all remaining, [v]iew, [e]dit chapter, [r]egenerate, [q]uit: ")
+	o.ensureInputScanner()
 	for {
-		var choice string
-		if _, err := fmt.Fscanln(input, &choice); err != nil {
-			return "q", chapter, err
+		fmt.Fprint(out, "[a]ccept, [A]ccept all remaining, [v]iew, [e]dit chapter, [r]egenerate, [q]uit: ")
+		if !o.inputScanner.Scan() {
+			if err := o.inputScanner.Err(); err != nil {
+				return "q", chapter, "", err
+			}
+			return "q", chapter, "", io.EOF
 		}
+		choice := strings.TrimSpace(o.inputScanner.Text())
 		switch choice {
 		case "a":
-			return "a", chapter, nil
+			return "a", chapter, "", nil
 		case "A":
-			return "A", chapter, nil
+			return "A", chapter, "", nil
 		case "v":
 			o.logEvent("review", generation, "viewed", nil, nil)
 			fmt.Fprintf(out, "--- Chapter ---\n%s\n", chapter)
 			if !endOfBook {
 				fmt.Fprintf(out, "--- Next hook state ---\n%s\n", hooks)
 			}
-			fmt.Fprint(out, "[a]ccept, [A]ccept all remaining, [v]iew, [e]dit chapter, [r]egenerate, [q]uit: ")
 		case "e":
 			edited, err := editChapter(o.Options.Editor, chapter)
 			if err != nil {
-				return "q", chapter, err
+				fmt.Fprintf(out, "编辑失败：%v\n", err)
+				continue
 			}
 			for {
 				fmt.Fprint(out, "Accept edited chapter? [a]ccept, [e]dit again, [q]uit: ")
-				var confirm string
-				if _, err := fmt.Fscanln(input, &confirm); err != nil {
-					return "q", chapter, err
+				if !o.inputScanner.Scan() {
+					if err := o.inputScanner.Err(); err != nil {
+						return "q", chapter, "", err
+					}
+					return "q", chapter, "", io.EOF
 				}
+				confirm := strings.TrimSpace(o.inputScanner.Text())
 				if confirm == "a" {
 					o.logEvent("review", generation, "edited_and_accepted", nil, nil)
-					return "a", edited, nil
+					return "a", edited, "", nil
 				}
 				if confirm == "q" {
-					return "q", chapter, nil
+					return "q", chapter, "", nil
 				}
 				if confirm == "e" {
 					edited, err = editChapter(o.Options.Editor, edited)
 					if err != nil {
-						return "q", chapter, err
+						fmt.Fprintf(out, "编辑失败：%v\n", err)
+						break
 					}
 					continue
 				}
-				fmt.Fprintln(out, "Choose a, e, or q.")
+				fmt.Fprintln(out, "无效输入，请输入 a、e 或 q。")
 			}
 		case "r":
-			return "r", chapter, nil
+			fmt.Fprint(out, "请简要说明需要修改的问题（可直接回车跳过）：")
+			if !o.inputScanner.Scan() {
+				if err := o.inputScanner.Err(); err != nil {
+					return "q", chapter, "", err
+				}
+				return "q", chapter, "", io.EOF
+			}
+			return "r", chapter, o.inputScanner.Text(), nil
+		case "q":
+			return "q", chapter, "", nil
 		default:
-			return "q", chapter, nil
+			fmt.Fprintln(out, "无效输入，请输入 a、A、v、e、r 或 q。")
 		}
 	}
+}
+
+func (o *Orchestrator) ensureInputScanner() {
+	if o.inputScanner != nil {
+		return
+	}
+	input := o.Options.Input
+	if input == nil {
+		input = os.Stdin
+	}
+	o.inputScanner = bufio.NewScanner(input)
 }
 
 func (o *Orchestrator) logEvent(action string, generation int, result string, eventErr error, details map[string]any) {
@@ -308,10 +343,7 @@ func (o *Orchestrator) logEvent(action string, generation int, result string, ev
 
 func editChapter(editor, chapter string) (string, error) {
 	if editor == "" {
-		editor = os.Getenv("EDITOR")
-	}
-	if editor == "" {
-		return "", fmt.Errorf("set $EDITOR to edit chapter text")
+		return "", fmt.Errorf("在 bookforge.yaml 的 generation.editor 中配置编辑器后再编辑章节")
 	}
 	f, err := os.CreateTemp("", "bookforge-chapter-*.qmd")
 	if err != nil {

@@ -48,6 +48,8 @@ user:
 ```text
 my-book/
 ├── bookforge.yaml
+├── _quarto.yml
+├── index.qmd
 ├── outline.md
 ├── initial_hooks.md
 ├── prompts/
@@ -70,9 +72,9 @@ my-book/
 
 `llm.headers` 是额外 HTTP 请求头的字符串映射，按原样发送；同名自定义头覆盖默认头。
 
-输出格式错误时根据 `generation.invalid_output_retries` 自动重试；数值是首次失败后额外重试次数，默认 3。耗尽后不提交章节或状态，保留并显示全部无效响应。
+输出格式错误时根据 `generation.invalid_output_retries` 自动重试；数值是首次失败后额外重试次数，默认 3。重试 prompt 临时加入格式提醒，章节提交后移除。审核时的 regenerate 评论也只保留到当前章节提交。耗尽后不提交章节或状态，保留并显示全部无效响应。
 
-操作日志位于 `.bookforge/log.jsonl`，记录生成、审核、重试、重写、清空和渲染时间、结果、章节序号及错误。`bookforge log` 显示日志；`bookforge status` 显示识别的章节文件映射、提交状态和结束状态。
+操作日志位于 `.bookforge/log.jsonl`，记录生成、审核、重试、重写、清空和 forge 的时间、结果、章节序号及错误。`bookforge log` 显示日志。
 
 交互审核支持批准当前章、`A` 批准并自动接受本次运行的其余章节、查看、编辑后确认、重新生成和退出。`A` 不修改项目配置。重写前先展示目标文件及级联失效范围并要求确认。`bookforge clear` 展示待删除文件并要求确认，只清理 BookForge 管理的产物；用户输入、提示词、配置、Quarto 项目和未登记文件保留。清理旧日志后会写入一条新的 clear 完成记录。
 
@@ -90,7 +92,7 @@ bookforge rewrite 5
 
 ## CLI 与 Quarto
 
-核心生成命令为 `generate [--auto]`、`rewrite <序号> [--auto]` 和 `render`。审核交互支持 `a` 批准、`A` 批准并自动批准本次运行余下章节、`v` 查看、`e` 编辑后确认、`r` 重生成和 `q` 退出。`A` 只影响本次运行。辅助命令 `init`、`validate`、`plan`、`status`、`log`、`hooks show` 和 `clear` 提供项目管理、状态查询和受限清理。
+核心生成命令为 `generate [--auto]`、`rewrite <序号> [--auto]` 和 `forge`。`forge` 是唯一的 PDF 编译命令：它将当前生成章节同步到 Quarto 的 `book.chapters` 列表，然后调用配置的 Quarto 命令完成编译。审核交互支持 `a` 批准、`A` 批准并自动批准本次运行余下章节、`v` 查看、`e` 编辑后确认、`r` 输入意见并重生成和 `q` 退出。编辑器通过 `generation.editor` 配置。`A` 只影响本次运行。辅助命令 `init`、`validate`、`log`、`hooks show` 和 `clear` 提供项目管理、状态查询和受限清理。
 
 `clear` 先列出 BookForge 管理的生成文件并要求确认，只删除编号章节、快照、审计、无效响应、归档和运行日志；不会递归删除项目，也不会删除用户源文件、提示词、Quarto 文件或未登记的文件。
 

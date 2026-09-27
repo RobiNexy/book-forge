@@ -1,0 +1,122 @@
+project:
+  type: book
+
+book:
+  title: "神经网络的几何、谱与信息结构"
+  author: "三非"
+  chapters:
+    - index.qmd
+    - 001.qmd
+    - 002.qmd
+    - 003.qmd
+    - 004.qmd
+    - 005.qmd
+    - 006.qmd
+    - 007.qmd
+    - 008.qmd
+    - 009.qmd
+    - 010.qmd
+    - 011.qmd
+    - 012.qmd
+    - 013.qmd
+    - 014.qmd
+    - 015.qmd
+    - 016.qmd
+    - 017.qmd
+    - 018.qmd
+    - 019.qmd
+    - 020.qmd
+    - 021.qmd
+    - 022.qmd
+    - 023.qmd
+    - 024.qmd
+    - 025.qmd
+    - 026.qmd
+    - 027.qmd
+    - 028.qmd
+    - 029.qmd
+    - 030.qmd
+
+format:
+  pdf:
+    # ---- 基础文档类 ----
+    documentclass: scrbook
+    classoption: [oneside, openright]
+    papersize: b4
+    geometry:
+      - paperwidth=180mm
+      - paperheight=240mm
+      - top=22mm
+      - bottom=18mm
+      - inner=22mm
+      - outer=25mm
+      - marginparsep=6mm
+      - marginparwidth=28mm
+      - headsep=6mm
+      - footskip=10mm
+    fontsize: 12pt
+
+    # ---- 行距与段落 ----
+    linestretch: 1.35
+    parskip: 0.8em
+    parindent: 0pt
+
+    # ========== 西文字体（Windows 默认） ==========
+    mainfont: "Times New Roman"
+    sansfont: "Arial"
+    monofont: "Consolas"
+    mathfont: "Cambria Math"
+
+    # ========== 中文字体与数学宏包 ==========
+    include-in-header:
+      - text: |
+          \usepackage{amsmath}
+          \usepackage{amssymb}
+          \usepackage{mathtools}
+          \usepackage{xeCJK}
+          \setCJKmainfont{SimSun}[BoldFont=SimHei, ItalicFont=KaiTi]
+          \setCJKsansfont{Microsoft YaHei}[BoldFont=Microsoft YaHei Bold, ItalicFont=Microsoft YaHei]
+          \setCJKmonofont{SimSun}
+          \usepackage{unicode-math}
+          \setmathfont{Cambria Math}
+          \usepackage{bm}
+          \usepackage{physics}
+          \usepackage{siunitx}
+          \AtBeginDocument{\let\boldsymbol\symbf}
+
+    # ---- 目录与编号 ----
+    toc: true
+    toc-depth: 2
+    lof: false
+    lot: false
+    toc-title: "目录"
+    number-sections: false
+    number-depth: 2
+
+    # ---- 超链接 ----
+    colorlinks: false
+    linkbordercolor: white
+
+    # ---- 交叉引用 ----
+    crossref:
+      fig-prefix: "图"
+      tbl-prefix: "表"
+      eq-prefix: "式"
+      sec-prefix: "节"
+      thm-prefix: "定理"
+      def-prefix: "定义"
+
+    # ---- 代码执行 ----
+    execute:
+      cache: true
+      echo: false
+
+    # ---- 编译引擎（lualatex） ----
+    pdf-engine: xelatex
+    latex-engine: xelatex
+
+    # ---- 额外宏包 ----
+    header-includes:
+      - \usepackage{graphicx}
+      - \usepackage{booktabs}
+      - \usepackage{longtable}

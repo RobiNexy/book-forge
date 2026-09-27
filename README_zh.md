@@ -28,6 +28,8 @@ go build -o ./bookforge ./cmd/bookforge
 ```text
 my-book/
 ├── bookforge.yaml
+├── _quarto.yml
+├── index.qmd
 ├── outline.md
 ├── initial_hooks.md
 ├── prompts/
@@ -66,7 +68,7 @@ my-book/
 
 ### 配置 Quarto
 
-BookForge 不会创建或修改 `quarto.yml`、模板或 PDF 排版配置。用户的 Quarto 书籍项目必须列出生成的 `.qmd` 文件。例如，生成三章后，在现有 `quarto.yml` 或 `_quarto.yml` 中加入：
+`init` 会提供内置的 `_quarto.yml` PDF 书籍模板和 `index.qmd` 示例文件；已有文件不会被覆盖。模板包含中文字体、数学宏包、页面尺寸和目录等设置，可按需修改。生成章节后，运行 `forge` 会自动同步 `book.chapters` 清单并调用配置的 Quarto 命令进行渲染：
 
 ```yaml
 project:
@@ -84,7 +86,7 @@ format:
   pdf: default
 ```
 
-`index.qmd` 和章节清单由用户维护。章节文件使用三位数字生成序号命名，不会从大纲标题推导文件名。渲染前 BookForge 会检查 Quarto 配置是否引用了每个生成章节。
+章节文件使用三位数字生成序号命名，不会从大纲标题推导文件名。`forge` 保留 `index.qmd` 和其他非编号章节条目，更新编号章节列表为当前已生成章节，然后一步完成 PDF 编译。
 
 ## 生成直到全书结束
 
@@ -92,10 +94,9 @@ format:
 
 ```sh
 ./bookforge --project ./my-book validate
-./bookforge --project ./my-book plan
 ```
 
-`validate` 检查配置和输入文件是否可读，以及现有状态是否一致；不会推断大纲章节或钩子语义。`plan` 预览下一个编号输出文件。
+`validate` 检查配置和输入文件是否可读，以及现有状态是否一致；不会推断大纲章节或钩子语义。
 
 将 API Key 设置在 `llm.api_key_env` 指定的环境变量中，默认是 `OPENAI_API_KEY`：
 
@@ -119,15 +120,15 @@ export OPENAI_API_KEY="你的 API Key"
 <<<END_OF_BOOK>>>
 ```
 
-两个标记互斥。缺少、重复或同时出现标记，或正文为空时，响应视为无效。默认自动重试 3 次（总计最多 4 次请求）；可通过 `generation.invalid_output_retries` 修改额外重试次数。每个无效响应都会显示并保存到 `.bookforge/invalid-responses/`；重试耗尽后生成失败，不提交章节或状态。即使关闭完整审计，无效响应仍会保留。钩子块是任意文本，每轮新块整体替换当前状态，不会自动累加历史钩子。
+两个标记互斥。缺少、重复或同时出现标记，或正文为空时，响应视为无效。默认自动重试 3 次（总计最多 4 次请求）；可通过 `generation.invalid_output_retries` 修改额外重试次数。格式错误后，后续重试请求会临时附加“请注意格式”提示；章节提交后提示不会带入下一章。每个无效响应都会显示并保存到 `.bookforge/invalid-responses/`；重试耗尽后生成失败，不提交章节或状态。即使关闭完整审计，无效响应仍会保留。钩子块是任意文本，每轮新块整体替换当前状态，不会自动累加历史钩子。
 
-默认逐章人工审核：
+默认逐章人工审核。无效输入（包括空行或空格）会提示并继续等待，不会退出程序：
 
 - `a`：批准并提交；
 - `A`：批准当前章节，并自动批准本次运行剩余章节；
 - `v`：查看完整正文和钩子文本；
-- `e`：使用 `$EDITOR` 编辑正文，保存后再确认；
-- `r`：重新请求模型生成；
+- `e`：使用配置的编辑器编辑正文，保存后再确认；
+- `r`：输入可选修改意见，再请求模型重新生成；意见只用于当前章节，提交后不会继续带入后续章节；
 - `q`：退出，不提交当前章节。
 
 使用 `--auto` 可跳过人工审核：
@@ -140,20 +141,19 @@ export OPENAI_API_KEY="你的 API Key"
 
 生成没有次数上限。BookForge 会在每章提交后继续调用模型，直到提交 `<<<END_OF_BOOK>>>`。中断后重新运行 `generate` 会从最近一次完整提交的章节和钩子快照继续；若最终标记已经提交，则提示全书完成并退出。
 
-## 重写、查看和渲染
+## 重写、查看和编译
 
 ```sh
-./bookforge --project ./my-book status
 ./bookforge --project ./my-book log
 ./bookforge --project ./my-book hooks show
 ./bookforge --project ./my-book hooks show 2
 ./bookforge --project ./my-book rewrite 5
 ./bookforge --project ./my-book rewrite 5 --auto
 ./bookforge --project ./my-book clear
-./bookforge --project ./my-book render
+./bookforge --project ./my-book forge
 ```
 
-`rewrite N` 会先展示解析出的目标章节文件并请求确认，再归档第 N 章及之后的所有章节、快照、审计和结束状态，恢复到 N−1 章后的状态，然后生成直到模型重新输出结束标记。`status` 以 JSON 展示章节序号、文件路径、提交状态和全书完成状态；`log` 输出 JSONL 操作历史。`hooks show [N]` 输出第 N 章后的原始钩子文本，不指定序号时显示最新状态。`clear` 会列出待删除的 BookForge 产物并要求确认，只清理工具管理的文件，保留用户输入、提示词、配置、Quarto 文件和无法识别的文件；清空完成后会留下本次清空操作的日志记录。
+`rewrite N` 会先展示解析出的目标章节文件并请求确认，再归档第 N 章及之后的所有章节、快照、审计和结束状态，恢复到 N−1 章后的状态，然后生成直到模型重新输出结束标记。`log` 输出 JSONL 操作历史。`hooks show [N]` 输出第 N 章后的原始钩子文本，不指定序号时显示最新状态。`clear` 会列出待删除的 BookForge 产物并要求确认，只清理工具管理的文件，保留用户输入、提示词、配置、Quarto 文件和无法识别的文件；清空完成后会留下本次清空操作的日志记录。`forge` 是唯一用于同步章节列表并编译 PDF 的命令。
 
 如果 `outline.md`、`initial_hooks.md`、`prompts/system.md` 或 `prompts/long_book_gen.md` 在生成开始后发生变化，续跑会被拒绝。使用 `rewrite 1` 可归档旧链、从更新后的初始钩子重置并重新生成。
 
@@ -176,9 +176,10 @@ export OPENAI_API_KEY="你的 API Key"
 | `llm.parameters` | 原样合并进模型 API 请求的任意字段 | `{}` |
 | `llm.headers` | 额外 HTTP 请求头 | `{}` |
 | `generation.review` | `interactive` 或 `auto` | `interactive` |
+| `generation.editor` | 编辑章节的编辑器命令；未配置时编辑操作会显示错误并返回审核菜单 | 空 |
 | `generation.store_prompt_and_response` | 审计中保存完整 prompt 和原始 response | `true` |
 | `generation.invalid_output_retries` | 输出无效后的额外重试次数 | `3` |
-| `quarto.project_dir` / `quarto.command` | Quarto 工作目录和可执行命令 | `.` / `quarto` |
+| `quarto.project_dir` / `quarto.command` | Quarto 工作目录和可执行命令（可用 PATH 命令或绝对路径） | `.` / `quarto` |
 
 `--auto`、`--model` 和 `--no-audit-full` 只影响本次运行。`llm.parameters` 的键值会直接合并进 API 请求，BookForge 不解释其含义；若服务端拒绝参数，会展示服务端错误。API Key 不会持久化；JSON 快照和审计由工具管理，用户无需编写 JSON。
 
@@ -207,7 +208,7 @@ llm:
 - `.bookforge/manifest.json` 保存输入文件哈希，不保存生成序号。
 - `.bookforge/snapshots/state_000.json` 保存初始钩子；`state_NNN.json` 保存当前钩子文本和全书完成标志。
 - `.bookforge/audit/run_NNN.json` 保存每轮元数据，可按配置附带完整 prompt 和原始 response。
-- `.bookforge/invalid-responses/` 无论是否开启完整审计都会保留格式错误的原始响应；`.bookforge/log.jsonl` 记录生成、审核、重试、重写、清空和渲染操作。
+- `.bookforge/invalid-responses/` 无论是否开启完整审计都会保留格式错误的原始响应；`.bookforge/log.jsonl` 记录生成、审核、重试、重写、清空和 forge 操作。
 - `chapters/NNN.qmd`、快照和审计文件共同识别已提交轮次；下一序号从连续完整产物推导。
 - `<<<END_OF_BOOK>>>` 是唯一完成条件，完成状态保存在最终快照。
 - 项目锁避免同一项目并发生成或渲染。
