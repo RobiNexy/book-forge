@@ -21,22 +21,18 @@ go build -o ./bookforge ./cmd/bookforge
 
 ```sh
 ./bookforge init ./my-book
-# Or select a font profile: a, b, c, or d
-./bookforge init --template c ./classic-book
 ```
 
-By default, `auto` selects a basic font setup for the current OS: Noto CJK on Linux, SimSun/Microsoft YaHei on Windows, or Songti SC/PingFang on macOS.
+`init` opens a two-step interactive wizard. Enter selects the recommended option at either prompt. The font choices are:
 
-| Option | Style | Font requirements |
+| Menu choice | Style | Font requirements |
 |---|---|---|
-| `a` | Portable basic | Bundled TeX Live Fandol and TeX Gyre; suitable across systems |
-| `b` | OS basic | Noto CJK on Linux; native Chinese fonts on Windows/macOS |
-| `c` | Literary serif | EB Garamond, Source Han, JetBrains Mono, STIX Two; install separately |
-| `d` | Modern humanist | IBM Plex, Source Han, JetBrains Mono, STIX Two; install separately |
+| `1` | OS basic (recommended) | Noto CJK on Linux; native Chinese fonts on Windows/macOS |
+| `2` | Portable basic | Bundled TeX Live Fandol and TeX Gyre; suitable across systems |
+| `3` | Literary serif | EB Garamond, JetBrains Mono, STIX Two, plus Source Han Serif SC (CJK serif) and Source Han Sans SC (CJK sans); install separately |
+| `4` | Modern humanist | IBM Plex Serif/Sans, JetBrains Mono, STIX Two, plus Source Han Serif SC (CJK serif) and Source Han Sans SC (CJK sans); install separately |
 
-Use `--template auto` to explicitly select the OS default. Premium templates require XeLaTeX/fontconfig to locate the named fonts. For teams sharing a project across machines, install matching fonts or use profile `a`. Initialization never overwrites existing files, so selecting another profile will not replace an existing `_quarto.yml`.
-
-To scaffold for another OS, use the named profiles `linux`, `windows`, or `macos`; `auto` and profile `b` choose the current OS automatically.
+Premium fonts must be installed before rendering. Initialization never overwrites existing files, so running the wizard again will not replace an existing `_quarto.yml`.
 
 ### Five editorial designs
 
@@ -50,15 +46,16 @@ Alongside the font profiles, choose a complete visual direction for the cover, c
 | `nocturne` | Midnight | Deep blue, orbital gold lines, reversed title |
 | `jade` | Eastern / jade | Celadon paper, offset negative space, vermilion seal |
 
-Use a design name as a complete preset, or layer it over a font profile:
+The second wizard prompt offers these visual designs:
 
-```sh
-./bookforge init --template atelier ./my-book
-./bookforge init --template b --design swiss ./swiss-book
-./bookforge init --template c --design archive ./archive-book
-```
+1. Atelier — literary editorial
+2. Swiss — modular grid
+3. Archive — collected edition
+4. Nocturne — midnight
+5. Jade — Eastern / jade
+6. Classic — the clean base layout without a dedicated cover design
 
-`--template atelier` is shorthand for portable fonts plus that design. `--design swiss` preserves the font profile selected by `--template`. Long titles, chapter headings, and body layouts were compiled against the same specimen containing equations, tables, footnotes, code, and multi-page text.
+Long titles, chapter headings, and body layouts were compiled against the same specimen containing equations, tables, footnotes, code, and multi-page text.
 
 `init` creates missing files and never overwrites existing ones:
 
@@ -105,7 +102,7 @@ Continuity note: the protagonist's sister disappeared three years ago.
 
 ### Configure Quarto
 
-`init` provides a built-in `_quarto.yml` PDF book template and an example `index.qmd`; existing files are never overwritten. The book layout includes a print-friendly trim size, a custom title page and chapter typography, plus Chinese typography, math fonts, a table of contents, and Chinese cross-reference labels. Each design preset supplies its own palette, chapter openings, title treatment, and running page furniture. Explicit CJK-space handling preserves headings such as `# 第一章 这是一个标题` in the PDF. Customize the generated `_quarto.yml` as needed. After generating chapters, run `forge` to synchronize `book.chapters` and invoke the configured Quarto command:
+`init` provides a built-in `_quarto.yml` PDF book template and an example `index.qmd`; existing files are never overwritten. Covers display only the book title, optional subtitle, and author—no theme labels or promotional copy. The book layout includes a print-friendly trim size and chapter typography, plus Chinese typography, math fonts, a table of contents, and Chinese cross-reference labels. Each design preset supplies its own palette, chapter openings, and running page furniture. Explicit CJK-space handling preserves headings such as `# 第一章 这是一个标题` in the PDF. Customize the generated `_quarto.yml` as needed. After generating chapters, run `forge` to synchronize `book.chapters` and invoke the configured Quarto command:
 
 ```yaml
 project:
@@ -253,7 +250,7 @@ Headers are forwarded as configured; a custom header with the same name as a def
 
 Design details are in [`docs/new_design.md`](docs/new_design.md). Development checks: `go test ./...`, `go test -race ./...`, and `go vet ./...`.
 
-With Quarto and XeLaTeX installed, optionally render all five full-PDF integration specimens (PDFs, `.tex`, and logs are kept for review):
+With Quarto and XeLaTeX installed, optionally render the base template and all five full-PDF design specimens (PDFs, `.tex`, and logs are kept for review):
 
 ```sh
 BOOKFORGE_RENDER_TEST_DIR=/tmp/bookforge-designs \

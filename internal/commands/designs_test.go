@@ -15,6 +15,7 @@ import (
 )
 
 var designNames = []string{"atelier", "swiss", "archive", "nocturne", "jade"}
+var renderPresets = []string{"base", "atelier", "swiss", "archive", "nocturne", "jade"}
 
 func TestDesignerPresets(t *testing.T) {
 	for _, design := range designNames {
@@ -70,21 +71,27 @@ func TestDesignerPDFs(t *testing.T) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, design := range designNames {
-		t.Run(design, func(t *testing.T) {
-			dir, err := os.MkdirTemp(root, design+"-")
+	for _, preset := range renderPresets {
+		t.Run(preset, func(t *testing.T) {
+			dir, err := os.MkdirTemp(root, preset+"-")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := InitWithTemplate(dir, design); err != nil {
-				t.Fatal(err)
+			var initErr error
+			if preset == "base" {
+				initErr = InitWithTemplate(dir, "a")
+			} else {
+				initErr = InitWithTemplate(dir, preset)
+			}
+			if initErr != nil {
+				t.Fatal(initErr)
 			}
 			configFile := filepath.Join(dir, "_quarto.yml")
 			data, err := os.ReadFile(configFile)
 			if err != nil {
 				t.Fatal(err)
 			}
-			text := strings.Replace(string(data), `title: "BookForge 书籍生成器"`, "title: \"时间的纹理：在复杂的世界中寻找一种清晰而从容的阅读方式\"\n  subtitle: \"文字、秩序与留白\"\n  output-file: specimen", 1)
+			text := strings.Replace(string(data), `title: "BookForge 书籍生成器"`, "title: \"时间的纹理\"\n  subtitle: \"文字、秩序与留白\"\n  output-file: specimen", 1)
 			text = strings.Replace(text, "pdf-engine: xelatex", "pdf-engine: xelatex\n    latex-auto-install: false\n    latex-clean: false\n    keep-tex: true", 1)
 			if err := os.WriteFile(configFile, []byte(text), 0o644); err != nil {
 				t.Fatal(err)
@@ -116,16 +123,31 @@ func TestDesignerPDFs(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
 			if err := Forge(ctx, manifest); err != nil {
-				t.Fatalf("render %s: %v (project: %s)", design, err, dir)
+				t.Fatalf("render %s: %v (project: %s)", preset, err, dir)
 			}
 			pdf := filepath.Join(dir, "_book", "specimen.pdf")
 			output, err := exec.CommandContext(ctx, "pdftotext", "-layout", pdf, "-").CombinedOutput()
 			if err != nil {
 				t.Fatalf("pdftotext: %v\n%s", err, output)
 			}
-			for _, want := range []string{"时间的纹理", "文字、秩序与留白", "第一章 这是一个标题", "reading_time", "全书测试完成"} {
+			for _, want := range []string{"时间的纹理", "第一章 这是一个标题", "reading_time", "全书测试完成"} {
 				if !strings.Contains(string(output), want) {
 					t.Errorf("PDF missing %q: %s", want, pdf)
+				}
+			}
+			cover, err := exec.CommandContext(ctx, "pdftotext", "-f", "1", "-l", "1", "-layout", pdf, "-").CombinedOutput()
+			if err != nil {
+				t.Fatalf("extract cover: %v\n%s", err, cover)
+			}
+			coverText := string(cover)
+			for _, want := range []string{"时间的纹理", "文字、秩序与留白", "三非"} {
+				if !strings.Contains(coverText, want) {
+					t.Errorf("cover missing %q: %s", want, pdf)
+				}
+			}
+			for _, unwanted := range []string{"BOOKFORGE", "ATELIER", "SWISS", "ARCHIVE", "NOCTURNE", "JADE", "一本书", "FORM / CONTENT", "READING", "REFLECTION", "典藏", "留存思想", "夜航", "INTO THE UNKNOWN", "山色与书", "于留白处", "阅"} {
+				if strings.Contains(coverText, unwanted) {
+					t.Errorf("cover contains extra text %q: %s", unwanted, pdf)
 				}
 			}
 			if strings.Count(string(output), "第一章 这是一个标题") < 2 {

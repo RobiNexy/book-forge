@@ -21,22 +21,18 @@ go build -o ./bookforge ./cmd/bookforge
 
 ```sh
 ./bookforge init ./my-book
-# 或指定字体模板：a / b / c / d
-./bookforge init --template c ./classic-book
 ```
 
-默认 `auto` 按当前系统选择基础字体：Linux 使用 Noto CJK，Windows 使用宋体/微软雅黑，macOS 使用宋体 SC/PingFang。模板选项：
+`init` 会启动两步交互向导；在任一菜单直接按回车，即选择推荐项。第一步选择字体方案：
 
-| 选项 | 风格 | 字体要求 |
+| 菜单选项 | 风格 | 字体要求 |
 |---|---|---|
-| `a` | 通用基础 | TeX Live 自带 Fandol 和 TeX Gyre，适合跨系统迁移 |
-| `b` | 系统基础 | Linux 用 Noto CJK；Windows/macOS 用系统中文字体 |
-| `c` | 典藏衬线 | EB Garamond、Source Han、JetBrains Mono、STIX Two；需自行安装 |
-| `d` | 现代人文 | IBM Plex、Source Han、JetBrains Mono、STIX Two；需自行安装 |
+| `1` | 本机基础（推荐） | Linux 用 Noto CJK；Windows/macOS 用系统中文字体 |
+| `2` | 通用基础 | TeX Live 自带 Fandol 和 TeX Gyre，适合跨系统迁移 |
+| `3` | 典藏衬线 | EB Garamond、JetBrains Mono、STIX Two，以及 Source Han Serif SC（中文衬线）和 Source Han Sans SC（中文黑体）；需自行安装 |
+| `4` | 现代人文 | IBM Plex Serif/Sans、JetBrains Mono、STIX Two，以及 Source Han Serif SC（中文衬线）和 Source Han Sans SC（中文黑体）；需自行安装 |
 
-也可用 `--template auto` 明确选择系统默认。高配模板要求 XeLaTeX/fontconfig 能找到配置中列出的字体；跨机器分享时，建议项目成员统一安装字体或改用 `a`。初始化不会覆盖已有文件，因此更换模板不会改写既有 `_quarto.yml`。
-
-若要生成其他平台的基础配置，也可将 `--template` 设为 `linux`、`windows` 或 `macos`；当前系统对应的 `b` 和 `auto` 会自动选择其中一种。
+高配字体需要在渲染前自行安装。初始化不会覆盖已有文件，因此对已存在的 `_quarto.yml` 再次运行向导不会替换它。
 
 ### 五套编辑设计
 
@@ -50,15 +46,16 @@ go build -o ./bookforge ./cmd/bookforge
 | `nocturne` | 夜航 | 午夜蓝底、金色轨道、反白题字 |
 | `jade` | 东方青绿 | 玉色纸面、错位留白、印章红色点题 |
 
-设计名可以直接作为模板，也可以叠加在基础或高配字体上：
+第二步选择视觉设计：
 
-```sh
-./bookforge init --template atelier ./my-book
-./bookforge init --template b --design swiss ./swiss-book
-./bookforge init --template c --design archive ./archive-book
-```
+1. Atelier — 文艺编辑
+2. Swiss — 瑞士网格
+3. Archive — 典藏书系
+4. Nocturne — 午夜夜航
+5. Jade — 东方青绿
+6. 清简经典 — 不添加专属封面设计
 
-`--template atelier` 等价于通用基础字体加对应设计；`--design swiss` 则保留 `--template` 选定的字体。设计长标题、章节题字和正文层级都经过含数学、表格、脚注、代码及跨页内容的同一份样稿编译检查。
+长标题、章节题字和正文层级都经过含数学、表格、脚注、代码及跨页内容的同一份样稿编译检查。
 
 `init` 只创建缺少的文件，不覆盖已有文件：
 
@@ -105,7 +102,7 @@ my-book/
 
 ### 配置 Quarto
 
-`init` 会提供内置的 `_quarto.yml` PDF 书籍模板和 `index.qmd` 示例文件；已有文件不会被覆盖。版式包含适合书稿的开本、封面与正文排版，以及中英文、数学、目录和中文交叉引用支持；选择设计后，会套用对应的专属颜色、章首页、题字和页眉页码。模板中的空格保留设置确保 `# 第一章 这是一个标题` 在 PDF 标题中显示为“第一章 这是一个标题”。所有样式均可在 `_quarto.yml` 中继续调整。生成章节后，运行 `forge` 会自动同步 `book.chapters` 清单并调用配置的 Quarto 命令进行渲染：
+`init` 会提供内置的 `_quarto.yml` PDF 书籍模板和 `index.qmd` 示例文件；已有文件不会被覆盖。封面只排书名、副标题（若设置）和作者，不再印主题标签或宣传文案。版式包含适合书稿的开本、封面与正文排版，以及中英文、数学、目录和中文交叉引用支持；选择设计后，会套用对应的专属颜色、章首页和页眉页码。模板中的空格保留设置确保 `# 第一章 这是一个标题` 在 PDF 标题中显示为“第一章 这是一个标题”。所有样式均可在 `_quarto.yml` 中继续调整。生成章节后，运行 `forge` 会自动同步 `book.chapters` 清单并调用配置的 Quarto 命令进行渲染：
 
 ```yaml
 project:
@@ -253,7 +250,7 @@ llm:
 
 架构说明见 [`docs/new_design.md`](docs/new_design.md)。开发检查可运行 `go test ./...`、`go test -race ./...` 和 `go vet ./...`。
 
-安装 Quarto 和 XeLaTeX 后，可选运行五套完整 PDF 集成测试；PDF、`.tex` 和编译日志会留在指定目录供预览：
+安装 Quarto 和 XeLaTeX 后，可选运行基础版和五套设计版的完整 PDF 集成测试；PDF、`.tex` 和编译日志会留在指定目录供预览：
 
 ```sh
 BOOKFORGE_RENDER_TEST_DIR=/tmp/bookforge-designs \

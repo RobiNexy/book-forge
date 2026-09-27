@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -44,35 +46,35 @@ func TestGenerateRejectsRemovedCountOption(t *testing.T) {
 	}
 }
 
-func TestInitTemplateOption(t *testing.T) {
+func TestInitWizardDefaultsAndSelections(t *testing.T) {
+	defaultFont, err := chooseInitOption(bufio.NewReader(strings.NewReader("\n")), &bytes.Buffer{}, "font", initFontOptions, 0)
+	if err != nil || defaultFont.value != "b" {
+		t.Fatalf("default font=%q err=%v", defaultFont.value, err)
+	}
+	defaultDesign, err := chooseInitOption(bufio.NewReader(strings.NewReader("\n")), &bytes.Buffer{}, "design", initDesignOptions, 0)
+	if err != nil || defaultDesign.value != "atelier" {
+		t.Fatalf("default design=%q err=%v", defaultDesign.value, err)
+	}
+	selectedFont, err := chooseInitOption(bufio.NewReader(strings.NewReader("invalid\n2\n")), &bytes.Buffer{}, "font", initFontOptions, 0)
+	if err != nil || selectedFont.value != "a" {
+		t.Fatalf("retry font=%q err=%v", selectedFont.value, err)
+	}
 	dir := filepath.Join(t.TempDir(), "book")
-	if code := run([]string{"init", "--template", "d", dir}); code != 0 {
-		t.Fatalf("init exit code = %d", code)
+	var output bytes.Buffer
+	if code := initCommand([]string{dir}, ".", strings.NewReader("2\n5\n"), &output); code != 0 {
+		t.Fatalf("init exit code = %d; output=%q", code, output.String())
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "_quarto.yml"))
-	if err != nil || !strings.Contains(string(data), "IBM Plex Sans") {
-		t.Fatalf("modern template not selected: %v", err)
+	if err != nil || !strings.Contains(string(data), "FandolSong-Regular.otf") || !strings.Contains(string(data), "bookseal") {
+		t.Fatalf("chosen portable font and jade design missing: %v", err)
 	}
-	designDir := filepath.Join(t.TempDir(), "jade")
-	if code := run([]string{"init", "--template", "b", "--design", "jade", designDir}); code != 0 {
-		t.Fatalf("init with layered design exit code = %d", code)
+	if !strings.Contains(output.String(), "跨平台基础字体") || !strings.Contains(output.String(), "Jade · 东方青绿") {
+		t.Fatalf("selection summary missing: %q", output.String())
 	}
-	designData, err := os.ReadFile(filepath.Join(designDir, "_quarto.yml"))
-	if err != nil || !strings.Contains(string(designData), "bookseal") || !strings.Contains(string(designData), `\setCJKmainfont{`) {
-		t.Fatalf("selected design/font combination missing: %v", err)
+	if code := initCommand([]string{"--template", "d"}, ".", strings.NewReader(""), &bytes.Buffer{}); code != 64 {
+		t.Fatalf("removed template flag exit code = %d", code)
 	}
-	directDir := filepath.Join(t.TempDir(), "nocturne")
-	if code := run([]string{"init", "--template", "nocturne", directDir}); code != 0 {
-		t.Fatalf("direct designer preset exit code = %d", code)
-	}
-	directData, err := os.ReadFile(filepath.Join(directDir, "_quarto.yml"))
-	if err != nil || !strings.Contains(string(directData), "booknight") || !strings.Contains(string(directData), "FandolSong-Regular.otf") {
-		t.Fatalf("direct preset did not select portable font design: %v", err)
-	}
-	if code := run([]string{"init", "--template", "invalid", filepath.Join(t.TempDir(), "invalid")}); code != 64 {
-		t.Fatalf("invalid template exit code = %d", code)
-	}
-	if code := run([]string{"init", "--design", "invalid", filepath.Join(t.TempDir(), "invalid-design")}); code != 64 {
-		t.Fatalf("invalid design exit code = %d", code)
+	if code := initCommand(nil, ".", strings.NewReader(""), &bytes.Buffer{}); code != 2 {
+		t.Fatalf("EOF cancellation exit code = %d", code)
 	}
 }

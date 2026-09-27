@@ -38,7 +38,7 @@ func TestInitCreatesUsableProjectWithoutOverwritingFiles(t *testing.T) {
 		t.Fatalf("existing outline changed: %q, %v", data, err)
 	}
 	quarto, err := os.ReadFile(filepath.Join(dir, "_quarto.yml"))
-	if err != nil || !strings.Contains(string(quarto), "CJKspace=true") || !strings.Contains(string(quarto), "BOOKFORGE") || !strings.Contains(string(quarto), "index.qmd") {
+	if err != nil || !strings.Contains(string(quarto), "CJKspace=true") || !strings.Contains(string(quarto), "BookForgeCoverTitle") || strings.Contains(string(quarto), "BOOKFORGE") || !strings.Contains(string(quarto), "index.qmd") {
 		t.Fatalf("built-in Quarto book template missing: %v", err)
 	}
 	index, err := os.ReadFile(filepath.Join(dir, "index.qmd"))

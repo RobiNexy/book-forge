@@ -57,13 +57,13 @@ var bookTemplates = map[string]bookTemplate{
 		accent:   "36526A", muted: "71808A", heading: "\\sffamily",
 	},
 	"literary": {
-		name: "literary", description: "典藏 · EB Garamond + 思源宋体 (install fonts)",
+		name: "literary", description: "典藏 · EB Garamond + Source Han Serif SC / Sans SC (install fonts)",
 		main: "EB Garamond", sans: "Inter", mono: "JetBrains Mono", math: "STIX Two Math",
 		cjkSetup: "\\setCJKmainfont{Source Han Serif SC}\n\\setCJKsansfont{Source Han Sans SC}\n\\setCJKmonofont{Source Han Sans SC}",
 		accent:   "824F40", muted: "85766F", heading: "",
 	},
 	"modern": {
-		name: "modern", description: "现代 · IBM Plex + 思源黑体 (install fonts)",
+		name: "modern", description: "现代 · IBM Plex + Source Han Serif SC / Sans SC (install fonts)",
 		main: "IBM Plex Serif", sans: "IBM Plex Sans", mono: "JetBrains Mono", math: "STIX Two Math",
 		cjkSetup: "\\setCJKmainfont{Source Han Serif SC}\n\\setCJKsansfont{Source Han Sans SC}\n\\setCJKmonofont{Source Han Sans SC}",
 		accent:   "136F72", muted: "658485", heading: "\\sffamily",
@@ -85,8 +85,8 @@ func renderBookTemplate(selection string) (string, string, error) {
 	return renderBookDesign(selection, "")
 }
 
-// A design name can be used as a complete portable preset, or combined with
-// an existing font profile through --design. No host fonts are needed by presets.
+// A design name can be used as a complete portable preset, or combined with a
+// font profile through InitWithDesign. No host fonts are needed by presets.
 func renderBookDesign(selection, design string) (string, string, error) {
 	selection = strings.ToLower(selection)
 	design = strings.ToLower(design)

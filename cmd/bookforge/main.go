@@ -2,10 +2,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -40,27 +42,7 @@ func run(args []string) int {
 	command, args := args[0], args[1:]
 	switch command {
 	case "init":
-		dir := project
-		fs := flag.NewFlagSet("init", flag.ContinueOnError)
-		fs.SetOutput(os.Stderr)
-		template := fs.String("template", "auto", "font profile: auto, a (portable), b (OS), c (literary), d (modern)")
-		design := fs.String("design", "", "visual design: atelier, swiss, archive, nocturne, jade (also accepted by --template)")
-		if err := fs.Parse(args); err != nil {
-			return 64
-		}
-		if fs.NArg() > 1 {
-			return report(fmt.Errorf("init accepts at most one directory"), 64)
-		}
-		if fs.NArg() == 1 {
-			dir = fs.Arg(0)
-		}
-		if err := commands.InitWithDesign(dir, *template, *design); err != nil {
-			code := 73
-			if strings.Contains(err.Error(), "unknown template") || strings.Contains(err.Error(), "unknown design") || strings.Contains(err.Error(), "conflicting template") {
-				code = 64
-			}
-			return report(err, code)
-		}
+		return initCommand(args, project, os.Stdin, os.Stdout)
 	case "validate":
 		if len(args) != 0 {
 			return report(fmt.Errorf("validate accepts no arguments"), 64)
@@ -135,6 +117,84 @@ func run(args []string) int {
 		return 2
 	}
 	return 0
+}
+
+type initOption struct {
+	value, label, detail string
+}
+
+var initFontOptions = []initOption{
+	{"b", "本机基础字体", "按当前系统选择：Linux Noto CJK、Windows 宋体/微软雅黑、macOS 宋体 SC/PingFang"},
+	{"a", "跨平台基础字体", "TeX Live 自带 Fandol + TeX Gyre，适合跨系统协作"},
+	{"c", "典藏高配字体", "EB Garamond + Source Han Serif SC / Source Han Sans SC；需自行安装"},
+	{"d", "现代高配字体", "IBM Plex + Source Han Serif SC / Source Han Sans SC；需自行安装"},
+}
+
+var initDesignOptions = []initOption{
+	{"atelier", "Atelier · 文艺编辑", "暖纸色、陶土侧栏、衬线字母标记"},
+	{"swiss", "Swiss · 瑞士网格", "朱红几何块、现代无衬线、清晰网格"},
+	{"archive", "Archive · 典藏书系", "象牙纸、双细框、古典居中章题"},
+	{"nocturne", "Nocturne · 午夜夜航", "深蓝底色、轨道线、金色点睛"},
+	{"jade", "Jade · 东方青绿", "玉色纸面、错位留白、朱红印章"},
+	{"", "清简经典", "保留基础书籍版式，不添加专属封面设计"},
+}
+
+func initCommand(args []string, project string, input io.Reader, output io.Writer) int {
+	if len(args) > 1 {
+		return report(fmt.Errorf("init accepts at most one directory"), 64)
+	}
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			return report(fmt.Errorf("init is interactive; template flags are no longer supported"), 64)
+		}
+	}
+	if len(args) == 1 {
+		project = args[0]
+	}
+	reader := bufio.NewReader(input)
+	font, err := chooseInitOption(reader, output, "选择字体方案", initFontOptions, 0)
+	if err != nil {
+		return report(err, 2)
+	}
+	design, err := chooseInitOption(reader, output, "选择书籍设计", initDesignOptions, 0)
+	if err != nil {
+		return report(err, 2)
+	}
+	fmt.Fprintf(output, "\n字体方案：%s\n书籍设计：%s\n\n", font.label, design.label)
+	if err := commands.InitWithDesign(project, font.value, design.value); err != nil {
+		return report(err, 73)
+	}
+	return 0
+}
+
+func chooseInitOption(reader *bufio.Reader, output io.Writer, question string, options []initOption, defaultIndex int) (initOption, error) {
+	fmt.Fprintf(output, "? %s\n", question)
+	for i, option := range options {
+		marker := " "
+		if i == defaultIndex {
+			marker = "*"
+		}
+		fmt.Fprintf(output, "  %s %d. %s — %s\n", marker, i+1, option.label, option.detail)
+	}
+	for {
+		fmt.Fprintf(output, "选择 [回车使用 %d]: ", defaultIndex+1)
+		line, err := reader.ReadString('\n')
+		if err != nil && len(line) == 0 {
+			return initOption{}, fmt.Errorf("模板选择已取消：没有收到输入")
+		}
+		selection := strings.TrimSpace(line)
+		if selection == "" {
+			return options[defaultIndex], nil
+		}
+		choice, parseErr := strconv.Atoi(selection)
+		if parseErr == nil && choice >= 1 && choice <= len(options) {
+			return options[choice-1], nil
+		}
+		fmt.Fprintf(output, "请输入 1 到 %d 之间的编号，或直接按回车。\n", len(options))
+		if err != nil {
+			return initOption{}, fmt.Errorf("模板选择已取消：读取输入失败")
+		}
+	}
 }
 
 func parseRewriteArgs(args []string) (int, bool, error) {
@@ -214,7 +274,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, `bookforge <command> [options]
 
 Commands:
-  init [--template NAME] [--design NAME] [dir]  create a project scaffold
+  init [dir]                create a project scaffold with interactive choices
   validate                  check config and readable text inputs
   generate [--auto]         generate until the end-of-book marker
   rewrite N [--auto]        cascade rewrite from generation N to the end marker
@@ -223,8 +283,6 @@ Commands:
   clear                     remove BookForge-generated data after confirmation
   forge                     synchronize chapters and compile the Quarto book (PDF)
 
-Templates: a portable, b OS fonts, c literary, d modern; named OS profiles: linux, windows, macos
-Design presets: atelier, swiss, archive, nocturne, jade (portable fonts)
-Combine fonts and design: --template b --design swiss
+Init asks for a font profile and a book design; press Enter to accept defaults.
 Global options: --project DIR, --config FILE`)
 }

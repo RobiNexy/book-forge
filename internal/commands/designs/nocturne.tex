@@ -1,5 +1,6 @@
 % NOCTURNE / midnight blue, orbital geometry and restrained gold.
 \definecolor{booknight}{HTML}{17243A}
+\definecolor{bookmuted}{HTML}{A8B6CC}
 \geometry{paperwidth=170mm,paperheight=240mm,inner=25mm,outer=23mm,top=25mm,bottom=24mm}
 \setkomafont{chapter}{\normalfont\sffamily\huge\bfseries\color{bookaccent}}
 \RedeclareSectionCommand[beforeskip=22mm,afterskip=12mm]{chapter}
@@ -12,15 +13,12 @@
     \draw[bookgold!40!booknight,line width=.4pt] ([xshift=-22mm,yshift=45mm]current page.south east) circle[radius=43mm];
     \fill[bookgold] ([xshift=-22mm,yshift=100mm]current page.south east) circle[radius=1.4mm];
   }
-  {\small\sffamily\color{bookgold} N O C T U R N E\hfill 夜航\par}
-  \vspace*{33mm}
+  \par\vspace*{42mm}
   {\raggedright\BookCoverTitle}
   \vspace{5mm}{\BookCoverSubtitle}
   \vspace{9mm}
   {\color{bookgold}\rule{15mm}{1pt}\par}
   \vspace{9mm}{\BookCoverAuthor}
   \vfill
-  {\small\sffamily\color{bookgold} INTO THE UNKNOWN\par}
-  \vspace{5mm}{\BookCoverDate}
   \BookCoverEnd
 }

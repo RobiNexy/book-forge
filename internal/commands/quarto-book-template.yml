@@ -73,22 +73,31 @@ format:
           \ofoot*{\pagemark}
           \pagestyle{scrheadings}
           \renewcommand*{\chapterpagestyle}{plain.scrheadings}
-          % A quiet, typographic cover: warm paper, generous space, one accent rule.
+          % Minimal default cover: only title and author; the rule is decorative.
           \makeatletter
+          \newcommand{\BookForgeCoverTitle}{}
+          \newcommand{\BookForgeCoverSubtitle}{}
+          \providecommand{\subtitle}[1]{}
+          \renewcommand{\subtitle}[1]{\gdef\BookForgeCoverSubtitle{#1}}
+          \let\BookForgeOriginalTitle\title
+          \renewcommand{\title}[1]{%
+            \gdef\BookForgeCoverTitle{#1}%
+            \BookForgeOriginalTitle{#1}%
+          }
           \renewcommand{\maketitle}{%
             \begin{titlepage}
             \thispagestyle{empty}\pagecolor{bookpaper}\color{black}
-            \vspace*{0.16\textheight}
-            {\large\sffamily\bfseries\color{bookaccent} BOOKFORGE\hspace{0.6em}/\hspace{0.6em}一本书\par}
-            \vspace{1.8cm}
+            \vspace*{0.22\textheight}
             {\color{bookaccent}\rule{0.20\textwidth}{2pt}\par}
             \vspace{1.0cm}
-            {\normalfont\huge\bfseries\raggedright\@title\par}
+            {\normalfont\huge\bfseries\raggedright\BookForgeCoverTitle\par}
+            \ifx\BookForgeCoverSubtitle\@empty\else
+              \vspace{0.45cm}
+              {\large\color{bookmuted}\BookForgeCoverSubtitle\par}
+            \fi
             \vspace{0.8cm}
             {\large\color{bookmuted}\@author\par}
             \vfill
-            {\small\sffamily\color{bookmuted}\@date\par}
-            \vspace*{0.06\textheight}
             \end{titlepage}
             \nopagecolor\color{black}%
           }
