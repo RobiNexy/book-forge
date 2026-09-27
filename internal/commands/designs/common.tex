@@ -1,0 +1,32 @@
+% Designer layouts share metadata handling and keep all text selectable.
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\usepackage{mathtools}
+\usepackage{indentfirst}
+\definecolor{bookink}{HTML}{242B30}
+\definecolor{bookgold}{HTML}{CDB58A}
+\makeatletter
+\newcommand{\BookTitle}{\@title}
+\newcommand{\BookAuthor}{{\let\and\par\@author}}
+\newcommand{\BookDate}{\@date}
+\makeatother
+% Cover text is normal paragraph material, so long titles wrap naturally.
+\newcommand{\BookCoverStart}{\begin{titlepage}\thispagestyle{empty}\setlength{\parindent}{0pt}\color{bookink}}
+\newcommand{\BookCoverEnd}{\end{titlepage}\nopagecolor\color{bookink}}
+\newcommand{\BookCoverTitle}{\fontsize{30}{42}\selectfont\bfseries\BookTitle\par}
+\makeatletter
+\newcommand{\BookCoverSubtitle}{\@ifundefined{@subtitle}{}{\ifx\@subtitle\@empty\else{\Large\sffamily\color{bookmuted}\@subtitle\par}\fi}}
+\makeatother
+\newcommand{\BookCoverAuthor}{\large\BookAuthor\par}
+\newcommand{\BookCoverDate}{\small\sffamily\BookDate\par}
+\newcommand{\BookBackground}[1]{\begin{tikzpicture}[remember picture,overlay]#1\end{tikzpicture}}
+\setkomafont{disposition}{\normalfont\bfseries\color{bookaccent}}
+\setkomafont{caption}{\small\color{bookmuted}}
+\setkomafont{captionlabel}{\small\bfseries\color{bookaccent}}
+\RedeclareSectionCommand[beforeskip=2.2ex plus .5ex minus .2ex,afterskip=1ex]{section}
+\RedeclareSectionCommand[beforeskip=1.5ex plus .3ex,afterskip=.7ex]{subsection}
+\setlength{\skip\footins}{14pt}
+\widowpenalty=10000
+\clubpenalty=10000
+\renewcommand*{\chaptermarkformat}{}
+\renewcommand*{\sectionmarkformat}{}

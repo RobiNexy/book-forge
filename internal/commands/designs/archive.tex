@@ -1,0 +1,30 @@
+% ARCHIVE / a centered, double-ruled scholarly edition.
+\definecolor{bookpaper}{HTML}{F6F0DE}
+\geometry{paperwidth=165mm,paperheight=235mm,inner=25mm,outer=25mm,top=26mm,bottom=25mm}
+\setkomafont{chapter}{\normalfont\huge\bfseries\color{bookaccent}}
+\RedeclareSectionCommand[beforeskip=22mm,afterskip=12mm]{chapter}
+\renewcommand*{\chapterlinesformat}[3]{\centering#2#3\par\vspace{6mm}{\color{bookaccent}\rule{18mm}{.5pt}\quad\textasteriskcentered\quad\rule{18mm}{.5pt}}}
+\clearpairofpagestyles
+\chead{\headmark}
+\cfoot*{\pagemark}
+\renewcommand{\maketitle}{%
+  \BookCoverStart\pagecolor{bookpaper}
+  \BookBackground{
+    \draw[bookaccent,line width=.7pt] ([xshift=12mm,yshift=-12mm]current page.north west) rectangle ([xshift=-12mm,yshift=12mm]current page.south east);
+    \draw[bookaccent!45,line width=.35pt] ([xshift=14mm,yshift=-14mm]current page.north west) rectangle ([xshift=-14mm,yshift=14mm]current page.south east);
+  }
+  \centering
+  \vspace*{12mm}
+  {\small\sffamily A R C H I V E\par}
+  \vspace{8mm}{\color{bookaccent}\rule{16mm}{.5pt}\quad 典藏\quad\rule{16mm}{.5pt}\par}
+  \vspace{22mm}
+  {\BookCoverTitle}
+  \vspace{5mm}{\BookCoverSubtitle}
+  \vspace{10mm}{\color{bookmuted}\BookCoverAuthor}
+  \vfill
+  {\color{bookaccent}\Large\textasteriskcentered\par}
+  \vspace{7mm}{\small 留存思想的纹理\par}
+  \vspace{6mm}{\BookCoverDate}
+  \vspace*{6mm}
+  \BookCoverEnd
+}

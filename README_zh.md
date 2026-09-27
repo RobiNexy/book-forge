@@ -21,7 +21,44 @@ go build -o ./bookforge ./cmd/bookforge
 
 ```sh
 ./bookforge init ./my-book
+# 或指定字体模板：a / b / c / d
+./bookforge init --template c ./classic-book
 ```
+
+默认 `auto` 按当前系统选择基础字体：Linux 使用 Noto CJK，Windows 使用宋体/微软雅黑，macOS 使用宋体 SC/PingFang。模板选项：
+
+| 选项 | 风格 | 字体要求 |
+|---|---|---|
+| `a` | 通用基础 | TeX Live 自带 Fandol 和 TeX Gyre，适合跨系统迁移 |
+| `b` | 系统基础 | Linux 用 Noto CJK；Windows/macOS 用系统中文字体 |
+| `c` | 典藏衬线 | EB Garamond、Source Han、JetBrains Mono、STIX Two；需自行安装 |
+| `d` | 现代人文 | IBM Plex、Source Han、JetBrains Mono、STIX Two；需自行安装 |
+
+也可用 `--template auto` 明确选择系统默认。高配模板要求 XeLaTeX/fontconfig 能找到配置中列出的字体；跨机器分享时，建议项目成员统一安装字体或改用 `a`。初始化不会覆盖已有文件，因此更换模板不会改写既有 `_quarto.yml`。
+
+若要生成其他平台的基础配置，也可将 `--template` 设为 `linux`、`windows` 或 `macos`；当前系统对应的 `b` 和 `auto` 会自动选择其中一种。
+
+### 五套编辑设计
+
+除了字体组合，还可以选择一套完整视觉设计。设计会分别处理封面、章首页、正文标题、页眉页码和纸面配色；五套均使用通用 TeX Live 字体，不需要另装商业字体：
+
+| 设计 | 方向 | 视觉语言 |
+|---|---|---|
+| `atelier` | 文艺编辑 | 暖纸色、陶土侧栏、衬线字母标记 |
+| `swiss` | 瑞士网格 | 高对比红色几何块、无衬线字级和硬朗分隔线 |
+| `archive` | 典藏书系 | 象牙纸、双细框、居中章题和古典衬线 |
+| `nocturne` | 夜航 | 午夜蓝底、金色轨道、反白题字 |
+| `jade` | 东方青绿 | 玉色纸面、错位留白、印章红色点题 |
+
+设计名可以直接作为模板，也可以叠加在基础或高配字体上：
+
+```sh
+./bookforge init --template atelier ./my-book
+./bookforge init --template b --design swiss ./swiss-book
+./bookforge init --template c --design archive ./archive-book
+```
+
+`--template atelier` 等价于通用基础字体加对应设计；`--design swiss` 则保留 `--template` 选定的字体。设计长标题、章节题字和正文层级都经过含数学、表格、脚注、代码及跨页内容的同一份样稿编译检查。
 
 `init` 只创建缺少的文件，不覆盖已有文件：
 
@@ -68,7 +105,7 @@ my-book/
 
 ### 配置 Quarto
 
-`init` 会提供内置的 `_quarto.yml` PDF 书籍模板和 `index.qmd` 示例文件；已有文件不会被覆盖。模板包含中文字体、数学宏包、页面尺寸和目录等设置，可按需修改。生成章节后，运行 `forge` 会自动同步 `book.chapters` 清单并调用配置的 Quarto 命令进行渲染：
+`init` 会提供内置的 `_quarto.yml` PDF 书籍模板和 `index.qmd` 示例文件；已有文件不会被覆盖。版式包含适合书稿的开本、封面与正文排版，以及中英文、数学、目录和中文交叉引用支持；选择设计后，会套用对应的专属颜色、章首页、题字和页眉页码。模板中的空格保留设置确保 `# 第一章 这是一个标题` 在 PDF 标题中显示为“第一章 这是一个标题”。所有样式均可在 `_quarto.yml` 中继续调整。生成章节后，运行 `forge` 会自动同步 `book.chapters` 清单并调用配置的 Quarto 命令进行渲染：
 
 ```yaml
 project:
@@ -215,3 +252,10 @@ llm:
 - 提示缓存由模型服务端决定；BookForge 将大纲置于 user prompt 前部，但不保证缓存命中。
 
 架构说明见 [`docs/new_design.md`](docs/new_design.md)。开发检查可运行 `go test ./...`、`go test -race ./...` 和 `go vet ./...`。
+
+安装 Quarto 和 XeLaTeX 后，可选运行五套完整 PDF 集成测试；PDF、`.tex` 和编译日志会留在指定目录供预览：
+
+```sh
+BOOKFORGE_RENDER_TEST_DIR=/tmp/bookforge-designs \
+  go test ./internal/commands -run '^TestDesignerPDFs$' -count=1
+```

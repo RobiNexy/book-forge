@@ -1,0 +1,27 @@
+% SWISS / a modular editorial grid with a vermilion geometric field.
+\definecolor{bookpaper}{HTML}{F5F5F0}
+\geometry{paperwidth=180mm,paperheight=240mm,inner=23mm,outer=23mm,top=23mm,bottom=23mm}
+\setkomafont{chapter}{\normalfont\sffamily\huge\bfseries\color{bookink}}
+\setkomafont{section}{\normalfont\sffamily\Large\bfseries\color{bookink}}
+\setkomafont{subsection}{\normalfont\sffamily\large\bfseries\color{bookink}}
+\RedeclareSectionCommand[beforeskip=12mm,afterskip=9mm]{chapter}
+\renewcommand*{\chapterlinesformat}[3]{\raggedright#2#3\par\vspace{5mm}{\color{bookaccent}\rule{\linewidth}{2pt}}}
+\KOMAoptions{headsepline=.4pt}
+\setkomafont{headsepline}{\color{bookaccent}}
+\renewcommand{\maketitle}{%
+  \BookCoverStart\pagecolor{bookpaper}
+  \BookBackground{
+    \fill[bookaccent] ([yshift=38mm]current page.south west) rectangle ([yshift=99mm]current page.south east);
+    \fill[bookpaper] ([xshift=-25mm,yshift=68mm]current page.south east) circle[radius=22mm];
+    \draw[bookink,line width=.5pt] ([xshift=23mm,yshift=-20mm]current page.north west) -- ([xshift=-23mm,yshift=-20mm]current page.north east);
+  }
+  {\small\sffamily\bfseries S W I S S\hfill FORM / CONTENT\par}
+  \vspace*{22mm}
+  {\sffamily\raggedright\BookCoverTitle}
+  \vspace{5mm}{\BookCoverSubtitle}
+  \vspace{7mm}{\sffamily\BookCoverAuthor}
+  \vfill
+  {\small\sffamily\bfseries 清晰的结构，自由的思想。\par}
+  \vspace{4mm}{\color{bookmuted}\BookCoverDate}
+  \BookCoverEnd
+}

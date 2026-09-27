@@ -1,0 +1,62 @@
+# 第一章 这是一个标题
+
+时间并非只存在于钟表上，它也藏在纸页翻动的声音里。文字留下的是思想的轨迹，而排版决定我们如何沿着轨迹行走。这里专门保留标题中“第一章”与“这是一个标题”之间的空格。
+
+## 阅读的节奏 {#sec-rhythm}
+
+**重点应该清晰，但不必喧闹。** *强调可以轻一些，如同说话时微微放慢的语速。* 中英文混排时，design、typography 和 structure 应自然地落在中文句子中。正文数字 0123456789、括号（以及标点），都属于同一套视觉秩序。
+
+一个段落提供一个可以完整把握的意思。段落之间的停顿、章节开始时的空白和页面末尾的页码，共同构成阅读的导航系统。我们不追求每一页都有装饰，而是让装饰只出现在真正需要转折的位置。[^note]
+
+[^note]: 脚注使用更小的字号，仍然需要足够的行间距。Font size is only one part of readability.
+
+## 公式与表格
+
+从一组观测值中寻找稳定的结构，可以用最小二乘问题表达：
+
+$$
+\hat{\boldsymbol{\beta}} = \underset{\boldsymbol{\beta}}{\operatorname{argmin}}
+\left\|\mathbf{X}\boldsymbol{\beta}-\mathbf{y}\right\|_2^2
++\lambda\left\|\boldsymbol{\beta}\right\|_2^2 .
+$$ {#eq-model}
+
+@eq-model 的正则项限制了模型的复杂度。行内公式 $E=mc^2$、$\alpha+\beta=\gamma$ 与正文保持相近的视觉重量。
+
+| 元素 | 用途 | 建议 |
+|:-----|:-----|:-----|
+| 章标题 | 建立边界 | 明确的字号差异 |
+| 正文 | 承载思考 | 稳定的行距 |
+| 页眉 | 提供位置 | 低对比度 |
+
+: 页面元素的层级 {#tbl-hierarchy}
+
+{{< pagebreak >}}
+
+## 延续页：让阅读保持安静
+
+这一页专门验证非章首页的页眉、页码和段落缩进。阅读中的多数页面是这样普通的一页：没有巨大标题，没有复杂装饰，只有清楚而舒展的文字。
+
+正文里的空白不是浪费。它使不同层次的内容彼此区分，也让视线在一行结束后容易找到下一行的起点。如果把所有信息都放大，就不会再有真正重要的信息；如果把所有空白都填满，阅读就失去了呼吸。
+
+### 代码与注释
+
+```python
+def reading_time(words, rate=260):
+    # Estimate the reading time in minutes.
+    return words / rate
+
+print(reading_time(5200))
+```
+
+::: {.callout-note}
+## 小结
+配色服务于层级，字体服务于内容。见 @tbl-hierarchy 与 @sec-rhythm。
+:::
+
+1. 先建立适合长时间阅读的正文系统。
+2. 再安排章节转换和信息层级。
+3. 最后加入有限而有意义的装饰。
+
+> Typography is the craft of endowing human language with a durable visual form.
+
+更多信息可访问 [Quarto 文档](https://quarto.org/docs/books/)。正文、脚注、代码和链接，都应该在同一页上保持各自的位置。

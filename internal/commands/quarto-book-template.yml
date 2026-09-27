@@ -1,122 +1,99 @@
+# BookForge / __PROFILE__ — edit freely after initialization.
+# The chapter list is maintained by `bookforge forge`.
 project:
   type: book
 
 book:
-  title: "神经网络的几何、谱与信息结构"
+  title: "BookForge 书籍生成器"
   author: "三非"
+  date: ""
   chapters:
     - index.qmd
-    - 001.qmd
-    - 002.qmd
-    - 003.qmd
-    - 004.qmd
-    - 005.qmd
-    - 006.qmd
-    - 007.qmd
-    - 008.qmd
-    - 009.qmd
-    - 010.qmd
-    - 011.qmd
-    - 012.qmd
-    - 013.qmd
-    - 014.qmd
-    - 015.qmd
-    - 016.qmd
-    - 017.qmd
-    - 018.qmd
-    - 019.qmd
-    - 020.qmd
-    - 021.qmd
-    - 022.qmd
-    - 023.qmd
-    - 024.qmd
-    - 025.qmd
-    - 026.qmd
-    - 027.qmd
-    - 028.qmd
-    - 029.qmd
-    - 030.qmd
+
+lang: zh-CN
 
 format:
   pdf:
-    # ---- 基础文档类 ----
+    pdf-engine: xelatex
     documentclass: scrbook
-    classoption: [oneside, openright]
-    papersize: b4
+    classoption: [oneside, open=any, headings=big]
+    # A compact literary trim size; edit geometry for your printer.
     geometry:
-      - paperwidth=180mm
+      - paperwidth=170mm
       - paperheight=240mm
-      - top=22mm
-      - bottom=18mm
-      - inner=22mm
-      - outer=25mm
-      - marginparsep=6mm
-      - marginparwidth=28mm
-      - headsep=6mm
-      - footskip=10mm
-    fontsize: 12pt
-
-    # ---- 行距与段落 ----
-    linestretch: 1.35
-    parskip: 0.8em
-    parindent: 0pt
-
-    # ========== 西文字体（Windows 默认） ==========
-    mainfont: "Times New Roman"
-    sansfont: "Arial"
-    monofont: "Consolas"
-    mathfont: "Cambria Math"
-
-    # ========== 中文字体与数学宏包 ==========
-    include-in-header:
-      - text: |
-          \usepackage{amsmath}
-          \usepackage{amssymb}
-          \usepackage{mathtools}
-          \usepackage{xeCJK}
-          \setCJKmainfont{SimSun}[BoldFont=SimHei, ItalicFont=KaiTi]
-          \setCJKsansfont{Microsoft YaHei}[BoldFont=Microsoft YaHei Bold, ItalicFont=Microsoft YaHei]
-          \setCJKmonofont{SimSun}
-          \usepackage{unicode-math}
-          \setmathfont{Cambria Math}
-          \usepackage{bm}
-          \usepackage{physics}
-          \usepackage{siunitx}
-          \AtBeginDocument{\let\boldsymbol\symbf}
-
-    # ---- 目录与编号 ----
+      - top=25mm
+      - bottom=23mm
+      - inner=25mm
+      - outer=22mm
+      - headsep=9mm
+      - footskip=11mm
+    fontsize: 11pt
+    linestretch: 1.32
+    indent: true
+    mainfont: "__MAIN__"
+    sansfont: "__SANS__"
+    monofont: "__MONO__"
+    mathfont: "__MATH__"
     toc: true
     toc-depth: 2
-    lof: false
-    lot: false
     toc-title: "目录"
-    number-sections: false
-    number-depth: 2
-
-    # ---- 超链接 ----
-    colorlinks: false
-    linkbordercolor: white
-
-    # ---- 交叉引用 ----
+    number-sections: false # AI chapters often include their own chapter numbers.
+    colorlinks: true
+    linkcolor: "__ACCENT__"
+    urlcolor: "__ACCENT__"
+    citecolor: "__ACCENT__"
     crossref:
       fig-prefix: "图"
       tbl-prefix: "表"
       eq-prefix: "式"
       sec-prefix: "节"
-      thm-prefix: "定理"
-      def-prefix: "定义"
-
-    # ---- 代码执行 ----
-    execute:
-      cache: true
-      echo: false
-
-    # ---- 编译引擎（lualatex） ----
-    pdf-engine: xelatex
-    latex-engine: xelatex
-
-    # ---- 额外宏包 ----
-    header-includes:
-      - \usepackage{graphicx}
-      - \usepackage{booktabs}
-      - \usepackage{longtable}
+    include-in-header:
+      - text: |
+          \usepackage{xeCJK}
+          % Portable profile resolves Fandol by its TeX Live font filename.
+          __CJK_SETUP__
+          % Preserve the author's space in e.g. “第一章 这是一个标题”.
+          \xeCJKsetup{CJKspace=true}
+          \usepackage{microtype}
+          \usepackage{booktabs}
+          \usepackage{longtable}
+          \definecolor{bookaccent}{HTML}{__ACCENT_HEX__}
+          \definecolor{bookmuted}{HTML}{__MUTED_HEX__}
+          \definecolor{bookpaper}{HTML}{F4F1EA}
+          \setkomafont{chapter}{\normalfont\huge\bfseries\color{bookaccent}__HEADING__}
+          \setkomafont{section}{\normalfont\Large\bfseries\color{bookaccent}}
+          \setkomafont{subsection}{\normalfont\large\bfseries\color{bookaccent}}
+          \setkomafont{pageheadfoot}{\normalfont\small\color{bookmuted}}
+          \setkomafont{pagenumber}{\normalfont\small\color{bookmuted}}
+          \KOMAoptions{headsepline=false,footsepline=false}
+          \usepackage[automark]{scrlayer-scrpage}
+          \clearpairofpagestyles
+          \automark[section]{chapter}
+          \ihead{\headmark}
+          \ofoot*{\pagemark}
+          \pagestyle{scrheadings}
+          \renewcommand*{\chapterpagestyle}{plain.scrheadings}
+          % A quiet, typographic cover: warm paper, generous space, one accent rule.
+          \makeatletter
+          \renewcommand{\maketitle}{%
+            \begin{titlepage}
+            \thispagestyle{empty}\pagecolor{bookpaper}\color{black}
+            \vspace*{0.16\textheight}
+            {\large\sffamily\bfseries\color{bookaccent} BOOKFORGE\hspace{0.6em}/\hspace{0.6em}一本书\par}
+            \vspace{1.8cm}
+            {\color{bookaccent}\rule{0.20\textwidth}{2pt}\par}
+            \vspace{1.0cm}
+            {\normalfont\huge\bfseries\raggedright\@title\par}
+            \vspace{0.8cm}
+            {\large\color{bookmuted}\@author\par}
+            \vfill
+            {\small\sffamily\color{bookmuted}\@date\par}
+            \vspace*{0.06\textheight}
+            \end{titlepage}
+            \nopagecolor\color{black}%
+          }
+          \makeatother
+          \setlength{\parindent}{2em}
+          \setlength{\parskip}{0pt}
+          \emergencystretch=2em
+          __DESIGN__

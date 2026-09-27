@@ -41,14 +41,25 @@ func run(args []string) int {
 	switch command {
 	case "init":
 		dir := project
-		if len(args) > 1 {
+		fs := flag.NewFlagSet("init", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		template := fs.String("template", "auto", "font profile: auto, a (portable), b (OS), c (literary), d (modern)")
+		design := fs.String("design", "", "visual design: atelier, swiss, archive, nocturne, jade (also accepted by --template)")
+		if err := fs.Parse(args); err != nil {
+			return 64
+		}
+		if fs.NArg() > 1 {
 			return report(fmt.Errorf("init accepts at most one directory"), 64)
 		}
-		if len(args) == 1 {
-			dir = args[0]
+		if fs.NArg() == 1 {
+			dir = fs.Arg(0)
 		}
-		if err := commands.Init(dir); err != nil {
-			return report(err, 73)
+		if err := commands.InitWithDesign(dir, *template, *design); err != nil {
+			code := 73
+			if strings.Contains(err.Error(), "unknown template") || strings.Contains(err.Error(), "unknown design") || strings.Contains(err.Error(), "conflicting template") {
+				code = 64
+			}
+			return report(err, code)
 		}
 	case "validate":
 		if len(args) != 0 {
@@ -203,7 +214,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, `bookforge <command> [options]
 
 Commands:
-  init [dir]                create a project scaffold
+  init [--template NAME] [--design NAME] [dir]  create a project scaffold
   validate                  check config and readable text inputs
   generate [--auto]         generate until the end-of-book marker
   rewrite N [--auto]        cascade rewrite from generation N to the end marker
@@ -212,5 +223,8 @@ Commands:
   clear                     remove BookForge-generated data after confirmation
   forge                     synchronize chapters and compile the Quarto book (PDF)
 
+Templates: a portable, b OS fonts, c literary, d modern; named OS profiles: linux, windows, macos
+Design presets: atelier, swiss, archive, nocturne, jade (portable fonts)
+Combine fonts and design: --template b --design swiss
 Global options: --project DIR, --config FILE`)
 }

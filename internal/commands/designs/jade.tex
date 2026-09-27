@@ -1,0 +1,27 @@
+% JADE / an offset title panel, jade wash and a vermilion seal.
+\definecolor{bookpaper}{HTML}{E8EFE8}
+\definecolor{bookseal}{HTML}{AD493D}
+\geometry{paperwidth=170mm,paperheight=240mm,inner=27mm,outer=25mm,top=25mm,bottom=25mm}
+\setkomafont{chapter}{\normalfont\huge\bfseries\color{bookaccent}}
+\RedeclareSectionCommand[beforeskip=24mm,afterskip=13mm]{chapter}
+\renewcommand*{\chapterlinesformat}[3]{\raggedright{\color{bookseal}\rule{3mm}{3mm}}\par\vspace{7mm}#2#3}
+\setkomafont{section}{\normalfont\Large\bfseries\color{bookaccent}}
+\renewcommand{\maketitle}{%
+  \BookCoverStart\pagecolor{bookpaper}
+  \BookBackground{
+    \fill[bookaccent] ([xshift=-19mm]current page.north east) rectangle (current page.south east);
+    \fill[white!65!bookpaper] ([xshift=17mm,yshift=-43mm]current page.north west) rectangle ([xshift=-28mm,yshift=53mm]current page.south east);
+    \draw[bookaccent!20,line width=.4pt] ([xshift=27mm,yshift=-30mm]current page.north west) -- ([xshift=-35mm,yshift=-30mm]current page.north east);
+  }
+  {\small\sffamily\color{bookaccent} J A D E\hfill 山色与书\par}
+  \vspace*{40mm}
+  {\raggedright\BookCoverTitle}
+  \vspace{5mm}{\BookCoverSubtitle}
+  \vspace{12mm}{\color{bookaccent}\BookCoverAuthor}
+  \vspace{12mm}
+  {\setlength{\fboxsep}{3mm}\colorbox{bookseal}{\color{white}\sffamily 阅}\par}
+  \vfill
+  {\small\color{bookaccent} 于留白处，见天地。\par}
+  \vspace{5mm}{\BookCoverDate}
+  \BookCoverEnd
+}

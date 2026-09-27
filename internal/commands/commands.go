@@ -41,6 +41,20 @@ var quartoBookTemplate []byte
 
 // Init creates a project scaffold without replacing existing human-maintained files.
 func Init(dir string) error {
+	return InitWithTemplate(dir, "auto")
+}
+
+// InitWithTemplate creates the scaffold using an OS default or a chosen font profile.
+func InitWithTemplate(dir, selection string) error {
+	return InitWithDesign(dir, selection, "")
+}
+
+// InitWithDesign combines an optional visual design with the chosen font profile.
+func InitWithDesign(dir, selection, design string) error {
+	template, name, err := renderBookDesign(selection, design)
+	if err != nil {
+		return err
+	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return err
@@ -84,7 +98,7 @@ quarto:
 		"outline.md":               "# Add your complete outline here\n",
 		"initial_hooks.md":         "",
 		"index.qmd":                "",
-		"_quarto.yml":              string(quartoBookTemplate),
+		"_quarto.yml":              template,
 		"prompts/system.md":        "You are a thoughtful book author. Follow the project owner's writing instructions and maintain continuity.\n",
 		"prompts/long_book_gen.md": string(defaultLongBookRules),
 		".gitignore":               ".bookforge/audit/\n.bookforge/invalid-responses/\n.bookforge/log.jsonl\n.bookforge/lock\n.bookforge/archive/\n_book/\n",
@@ -94,7 +108,7 @@ quarto:
 			return err
 		}
 	}
-	fmt.Fprintf(os.Stdout, "Initialized BookForge project at %s\n", abs)
+	fmt.Fprintf(os.Stdout, "Initialized BookForge project at %s (template: %s)\n", abs, name)
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -37,7 +38,7 @@ func TestInitCreatesUsableProjectWithoutOverwritingFiles(t *testing.T) {
 		t.Fatalf("existing outline changed: %q, %v", data, err)
 	}
 	quarto, err := os.ReadFile(filepath.Join(dir, "_quarto.yml"))
-	if err != nil || !strings.Contains(string(quarto), "SimSun") || !strings.Contains(string(quarto), "030.qmd") {
+	if err != nil || !strings.Contains(string(quarto), "CJKspace=true") || !strings.Contains(string(quarto), "BOOKFORGE") || !strings.Contains(string(quarto), "index.qmd") {
 		t.Fatalf("built-in Quarto book template missing: %v", err)
 	}
 	index, err := os.ReadFile(filepath.Join(dir, "index.qmd"))
@@ -47,6 +48,62 @@ func TestInitCreatesUsableProjectWithoutOverwritingFiles(t *testing.T) {
 	hooks, err := os.ReadFile(filepath.Join(dir, "initial_hooks.md"))
 	if err != nil || string(hooks) != "" {
 		t.Fatalf("initial_hooks.md scaffold should be empty: %q, %v", hooks, err)
+	}
+}
+
+func TestBookTemplatesSelectFontsAndLeaveExistingConfigUntouched(t *testing.T) {
+	for _, tc := range []struct{ selection, profile, font string }{
+		{"a", "portable", "TeX Gyre Termes"},
+		{"c", "literary", "Source Han Serif SC"},
+		{"d", "modern", "IBM Plex Sans"},
+		{"linux", "linux", "Noto Serif CJK SC"},
+		{"windows", "windows", "SimSun"},
+		{"macos", "macos", "Songti SC"},
+	} {
+		t.Run(tc.profile, func(t *testing.T) {
+			content, name, err := renderBookTemplate(tc.selection)
+			if err != nil || name != tc.profile || !strings.Contains(content, tc.font) || strings.Contains(content, "__PROFILE__") {
+				t.Fatalf("template=%q name=%q err=%v", content, name, err)
+			}
+			var document yaml.Node
+			if err := yaml.Unmarshal([]byte(content), &document); err != nil {
+				t.Fatalf("invalid template YAML: %v", err)
+			}
+		})
+	}
+	nativeFont := map[string]string{"linux": "Noto Serif CJK SC", "windows": "SimSun", "darwin": "Songti SC"}[runtime.GOOS]
+	if nativeFont == "" {
+		nativeFont = "Noto Serif CJK SC"
+	}
+	native, name, err := renderBookTemplate("b")
+	if err != nil || name != defaultBookTemplate(runtime.GOOS) || !strings.Contains(native, nativeFont) {
+		t.Fatalf("native template name=%q err=%v", name, err)
+	}
+	automatic, automaticName, err := renderBookTemplate("auto")
+	if err != nil || automaticName != name || automatic != native {
+		t.Fatalf("auto template name=%q err=%v", automaticName, err)
+	}
+	if _, _, err := renderBookTemplate("unknown"); err == nil {
+		t.Fatal("unknown template accepted")
+	}
+	dir := filepath.Join(t.TempDir(), "book")
+	if err := InitWithTemplate(dir, "literary"); err != nil {
+		t.Fatal(err)
+	}
+	if err := InitWithTemplate(dir, "d"); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(dir, "_quarto.yml"))
+	if err != nil || !strings.Contains(string(content), "EB Garamond") || strings.Contains(string(content), "IBM Plex Serif") {
+		t.Fatalf("existing template overwritten: %v", err)
+	}
+}
+
+func TestDefaultBookTemplateUsesOS(t *testing.T) {
+	for system, want := range map[string]string{"linux": "linux", "windows": "windows", "darwin": "macos"} {
+		if got := defaultBookTemplate(system); got != want {
+			t.Errorf("defaultBookTemplate(%q) = %q, want %q", system, got, want)
+		}
 	}
 }
 

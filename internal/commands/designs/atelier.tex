@@ -1,0 +1,26 @@
+% ATELIER / an asymmetric literary journal, terracotta and warm paper.
+\definecolor{bookpaper}{HTML}{F4EEE3}
+\geometry{paperwidth=170mm,paperheight=240mm,inner=25mm,outer=23mm,top=25mm,bottom=24mm}
+\setkomafont{chapter}{\normalfont\huge\bfseries\color{bookaccent}}
+\RedeclareSectionCommand[beforeskip=24mm,afterskip=12mm]{chapter}
+\renewcommand*{\chapterlinesformat}[3]{\raggedright{\color{bookaccent}\rule{12mm}{1.4pt}}\par\vspace{6mm}#2#3}
+\renewcommand{\maketitle}{%
+  \BookCoverStart\pagecolor{bookpaper}
+  \BookBackground{
+    \fill[bookaccent] (current page.north west) rectangle ([xshift=9mm]current page.south west);
+    \draw[bookaccent!35,line width=.4pt] ([xshift=25mm,yshift=-24mm]current page.north west) -- ([xshift=-23mm,yshift=-24mm]current page.north east);
+  }
+  {\small\sffamily\color{bookaccent} A T E L I E R\hfill 文字与思想\par}
+  \vspace*{29mm}
+  {\color{bookaccent}\fontsize{64}{66}\selectfont\itshape Aa\par}
+  \vspace{10mm}
+  {\raggedright\BookCoverTitle}
+  \vspace{5mm}{\BookCoverSubtitle}
+  \vspace{9mm}
+  {\color{bookmuted}\BookCoverAuthor}
+  \vfill
+  {\color{bookaccent}\rule{16mm}{1.4pt}\par}\vspace{5mm}
+  {\small\sffamily READING\enspace /\enspace REFLECTION\par}
+  \vspace{5mm}{\color{bookmuted}\BookCoverDate}
+  \BookCoverEnd
+}
