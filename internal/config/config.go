@@ -25,6 +25,7 @@ type Config struct {
 	} `yaml:"project"`
 	LLM struct {
 		Provider        string            `yaml:"provider"`
+		APIFormat       string            `yaml:"api_format"`
 		Model           string            `yaml:"model"`
 		APIKeyEnv       string            `yaml:"api_key_env"`
 		BaseURL         string            `yaml:"base_url"`
@@ -36,10 +37,13 @@ type Config struct {
 		Headers         map[string]string `yaml:"headers"`
 	} `yaml:"llm"`
 	Generation struct {
-		Review                 string `yaml:"review"`
-		Editor                 string `yaml:"editor"`
-		StorePromptAndResponse bool   `yaml:"store_prompt_and_response"`
-		InvalidOutputRetries   int    `yaml:"invalid_output_retries"`
+		Review                 string        `yaml:"review"`
+		Editor                 string        `yaml:"editor"`
+		StorePromptAndResponse bool          `yaml:"store_prompt_and_response"`
+		InvalidOutputRetries   int           `yaml:"invalid_output_retries"`
+		APIErrorRetries        int           `yaml:"api_error_retries"`
+		RetryInitialDelay      time.Duration `yaml:"-"`
+		RetryInitialDelayText  string        `yaml:"retry_initial_delay"`
 	} `yaml:"generation"`
 	Quarto struct {
 		ProjectDir string `yaml:"project_dir"`
@@ -59,6 +63,7 @@ func Defaults() Config {
 	c.Project.ChaptersDir = "chapters"
 	c.Project.StateDir = ".bookforge"
 	c.LLM.Provider = "openai"
+	c.LLM.APIFormat = "chat_completions"
 	c.LLM.Model = "gpt-4.1"
 	c.LLM.APIKeyEnv = "OPENAI_API_KEY"
 	c.LLM.BaseURL = "https://api.openai.com/v1"
@@ -69,6 +74,9 @@ func Defaults() Config {
 	c.Generation.Review = "interactive"
 	c.Generation.StorePromptAndResponse = true
 	c.Generation.InvalidOutputRetries = 3
+	c.Generation.APIErrorRetries = 3
+	c.Generation.RetryInitialDelay = 30 * time.Second
+	c.Generation.RetryInitialDelayText = "30s"
 	c.Quarto.ProjectDir = "."
 	c.Quarto.Command = "quarto"
 	return c
@@ -102,6 +110,12 @@ func Load(path string) (Config, error) {
 		c.LLM.RequestTimeout, err = time.ParseDuration(c.LLM.TimeoutText)
 		if err != nil {
 			return Config{}, fmt.Errorf("invalid llm.request_timeout: %w", err)
+		}
+	}
+	if c.Generation.RetryInitialDelayText != "" {
+		c.Generation.RetryInitialDelay, err = time.ParseDuration(c.Generation.RetryInitialDelayText)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid generation.retry_initial_delay: %w", err)
 		}
 	}
 	paths := []struct{ name, value string }{
@@ -158,6 +172,9 @@ func (c Config) Validate() error {
 	if c.LLM.Provider != "openai" {
 		return fmt.Errorf("unsupported llm.provider %q (V1 supports openai)", c.LLM.Provider)
 	}
+	if c.LLM.APIFormat != "chat_completions" && c.LLM.APIFormat != "responses" {
+		return fmt.Errorf("unsupported llm.api_format %q (expected chat_completions or responses)", c.LLM.APIFormat)
+	}
 	if c.LLM.Model == "" || c.LLM.APIKeyEnv == "" || c.LLM.BaseURL == "" {
 		return fmt.Errorf("llm.model, llm.api_key_env, and llm.base_url must be non-empty")
 	}
@@ -176,6 +193,12 @@ func (c Config) Validate() error {
 	}
 	if c.Generation.InvalidOutputRetries < 0 {
 		return fmt.Errorf("generation.invalid_output_retries cannot be negative")
+	}
+	if c.Generation.APIErrorRetries < 0 {
+		return fmt.Errorf("generation.api_error_retries cannot be negative")
+	}
+	if c.Generation.RetryInitialDelay < 0 {
+		return fmt.Errorf("generation.retry_initial_delay cannot be negative")
 	}
 	if c.Quarto.Command == "" {
 		return fmt.Errorf("quarto.command must be non-empty")

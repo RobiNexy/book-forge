@@ -30,6 +30,14 @@ type Response struct {
 	Usage   Usage
 }
 
+// PermanentError marks a provider error that another identical request cannot fix.
+type PermanentError struct {
+	Err error
+}
+
+func (e PermanentError) Error() string { return e.Err.Error() }
+func (e PermanentError) Unwrap() error { return e.Err }
+
 // Client is the infrastructure boundary consumed by the chapter orchestrator.
 type Client interface {
 	Complete(context.Context, Request) (Response, error)

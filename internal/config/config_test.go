@@ -4,12 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadResolvesPathsAndDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bookforge.yaml")
-	data := []byte("apiVersion: bookforge/v1\nproject:\n  outline: manuscript/outline.md\n  initial_hooks: source/hooks.md\n  long_book_rules: prompts/long.md\nllm:\n  request_timeout: 2m\n  parameters:\n    reasoning_effort: high\n    custom_toggle: true\n  headers:\n    X-Api-Client: bookforge-test\n")
+	data := []byte("apiVersion: bookforge/v1\nproject:\n  outline: manuscript/outline.md\n  initial_hooks: source/hooks.md\n  long_book_rules: prompts/long.md\nllm:\n  request_timeout: 2m\n  parameters:\n    reasoning_effort: high\n    custom_toggle: true\n  headers:\n    X-Api-Client: bookforge-test\ngeneration:\n  api_error_retries: 5\n  retry_initial_delay: 45s\n")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +27,7 @@ func TestLoadResolvesPathsAndDefaults(t *testing.T) {
 	if cfg.Project.LongBookRules != filepath.Join(dir, "prompts/long.md") {
 		t.Fatalf("long book rules path = %q", cfg.Project.LongBookRules)
 	}
-	if cfg.LLM.Model != "gpt-4.1" || cfg.LLM.RequestTimeout.String() != "2m0s" || !cfg.Generation.StorePromptAndResponse || cfg.Generation.Review != "interactive" || cfg.Generation.InvalidOutputRetries != 3 {
+	if cfg.LLM.Model != "gpt-4.1" || cfg.LLM.APIFormat != "chat_completions" || cfg.LLM.RequestTimeout.String() != "2m0s" || !cfg.Generation.StorePromptAndResponse || cfg.Generation.Review != "interactive" || cfg.Generation.InvalidOutputRetries != 3 {
 		t.Fatalf("defaults or timeout not applied: %#v", cfg.LLM)
 	}
 	if cfg.LLM.Parameters["reasoning_effort"] != "high" || cfg.LLM.Parameters["custom_toggle"] != true {
@@ -34,6 +35,25 @@ func TestLoadResolvesPathsAndDefaults(t *testing.T) {
 	}
 	if cfg.LLM.Headers["X-Api-Client"] != "bookforge-test" {
 		t.Fatalf("request headers not preserved: %#v", cfg.LLM.Headers)
+	}
+	if cfg.Generation.APIErrorRetries != 5 || cfg.Generation.RetryInitialDelay != 45*time.Second {
+		t.Fatalf("retry settings not loaded: %#v", cfg.Generation)
+	}
+}
+
+func TestValidateAcceptsResponsesAPIFormat(t *testing.T) {
+	cfg := Defaults()
+	cfg.LLM.APIFormat = "responses"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("responses API format rejected: %v", err)
+	}
+}
+
+func TestValidateRejectsUnsupportedAPIFormat(t *testing.T) {
+	cfg := Defaults()
+	cfg.LLM.APIFormat = "completion"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected unsupported API format error")
 	}
 }
 

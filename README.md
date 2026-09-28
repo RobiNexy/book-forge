@@ -204,6 +204,7 @@ If `outline.md`, `initial_hooks.md`, `prompts/system.md`, or `prompts/long_book_
 | `project.chapters_dir` | Numbered `.qmd` output | `chapters` |
 | `project.state_dir` | Manifest, snapshots, and audits | `.bookforge` |
 | `llm.provider` / `llm.model` | Model backend and name | `openai` / `gpt-4.1` |
+| `llm.api_format` | OpenAI-compatible request format: `chat_completions` or `responses` | `chat_completions` |
 | `llm.api_key_env` | API-key environment variable | `OPENAI_API_KEY` |
 | `llm.base_url` | OpenAI-compatible endpoint | `https://api.openai.com/v1` |
 | `llm.temperature`, `max_output_tokens`, `request_timeout` | Generation parameters | `0.7`, `12000`, `10m` |
@@ -213,9 +214,15 @@ If `outline.md`, `initial_hooks.md`, `prompts/system.md`, or `prompts/long_book_
 | `generation.editor` | Editor command for chapter edits; if unset, editing reports an error and returns to review | empty |
 | `generation.store_prompt_and_response` | Save full prompt and raw response in audit | `true` |
 | `generation.invalid_output_retries` | Additional retries after an invalid response | `3` |
+| `generation.api_error_retries` | Additional retries after an API error | `3` |
+| `generation.retry_initial_delay` | Initial wait before retry; delays double up to five minutes, reset for each chapter | `30s` |
 | `quarto.project_dir` / `quarto.command` | Quarto working directory and executable (PATH command or absolute path) | `.`, `quarto` |
 
 CLI options `--auto`, `--model`, and `--no-audit-full` apply only to that run. `llm.parameters` keys and values are merged into the API request without BookForge interpreting their meaning; unsupported parameters are reported with the server's error response. API keys are never persisted. JSON snapshots and audit records are tool-managed; users do not need to write JSON.
+
+Transient API errors and invalid model output use the configured retry counts and exponential backoff. Permanent HTTP 4xx errors (except 408, 409, and 429) are returned immediately. `generation.retry_initial_delay: 0s` disables waiting; otherwise delays double after each retry and cap at five minutes. The delay sequence starts over for each chapter.
+
+To use an OpenAI-compatible Responses endpoint, set `llm.api_format: responses` and configure `llm.base_url` to the API root (for example, `https://opencode.ai/zen/go/v1`). BookForge sends requests to `/responses` and extracts output text and token usage from the Responses format.
 
 For example, a provider-specific option can be configured without adding it to BookForge's schema:
 

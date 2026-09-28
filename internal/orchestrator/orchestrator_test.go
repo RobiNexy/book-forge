@@ -3,11 +3,13 @@ package orchestrator
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/RobiNexy/book-forge/internal/llm"
 	"github.com/RobiNexy/book-forge/internal/store"
@@ -106,9 +108,14 @@ func TestInvalidOutputRetriesAreSavedWhenFullAuditIsDisabled(t *testing.T) {
 	}}
 	state := store.New(root)
 	var output bytes.Buffer
+	var retryDelays []time.Duration
 	o := &Orchestrator{
 		LLM: client, Store: state, Outline: "opaque outline",
 		Options: Options{Model: "test", Auto: true, AuditFull: false, InvalidOutputRetries: 2,
+			RetryInitialDelay: 30 * time.Second, WaitBeforeRetry: func(_ context.Context, delay time.Duration) error {
+				retryDelays = append(retryDelays, delay)
+				return nil
+			},
 			InitialHooks: "opaque hooks", SystemPrompt: "style", LongBookRules: "rules",
 			Inputs: store.InputHashes{Outline: "o", InitialHooks: "h", SystemPrompt: "s", LongBookRules: "l"}, Output: &output},
 	}
@@ -117,6 +124,9 @@ func TestInvalidOutputRetriesAreSavedWhenFullAuditIsDisabled(t *testing.T) {
 	}
 	if client.calls != 3 || !state.HasChapter(1) {
 		t.Fatalf("calls=%d chapter=%v", client.calls, state.HasChapter(1))
+	}
+	if fmt.Sprint(retryDelays) != "[30s 1m0s]" {
+		t.Fatalf("invalid-output retry delays = %v, want [30s 1m0s]", retryDelays)
 	}
 	invalidDir := filepath.Join(root, ".bookforge", "invalid-responses")
 	entries, err := os.ReadDir(invalidDir)
@@ -151,6 +161,60 @@ func TestInvalidOutputRetriesAreSavedWhenFullAuditIsDisabled(t *testing.T) {
 	}
 	if strings.Contains(string(audit), "full_prompt") || strings.Contains(string(audit), "raw_response") {
 		t.Fatal("successful full prompt/response should be omitted when full audit is disabled")
+	}
+}
+
+type retryStep struct {
+	response string
+	err      error
+}
+
+type retryLLM struct {
+	steps []retryStep
+	calls int
+}
+
+func (f *retryLLM) Complete(context.Context, llm.Request) (llm.Response, error) {
+	if f.calls >= len(f.steps) {
+		return llm.Response{}, fmt.Errorf("unexpected extra model request")
+	}
+	step := f.steps[f.calls]
+	f.calls++
+	return llm.Response{Content: step.response}, step.err
+}
+
+func TestAPIRetriesBackOffAndResetForEachChapter(t *testing.T) {
+	client := &retryLLM{steps: []retryStep{
+		{err: errors.New("temporary failure 1")},
+		{err: errors.New("temporary failure 2")},
+		{response: "chapter one\n<<<BOOKFORGE_HOOKS>>>\nhooks"},
+		{err: errors.New("temporary failure 3")},
+		{response: "final chapter\n<<<END_OF_BOOK>>>\n"},
+	}}
+	var delays []time.Duration
+	o := &Orchestrator{
+		LLM: client, Store: store.New(t.TempDir()), Outline: "outline",
+		Options: Options{Model: "test", Auto: true, APIErrorRetries: 3, RetryInitialDelay: 30 * time.Second,
+			WaitBeforeRetry: func(_ context.Context, delay time.Duration) error {
+				delays = append(delays, delay)
+				return nil
+			}, InitialHooks: "hooks", SystemPrompt: "style", LongBookRules: "rules",
+			Inputs: store.InputHashes{Outline: "o", InitialHooks: "h", SystemPrompt: "s", LongBookRules: "l"}},
+	}
+	if err := o.Generate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if client.calls != 5 {
+		t.Fatalf("API calls = %d, want 5", client.calls)
+	}
+	if fmt.Sprint(delays) != "[30s 1m0s 30s]" {
+		t.Fatalf("API retry delays = %v, want [30s 1m0s 30s]", delays)
+	}
+}
+
+func TestRetryDelayCapsAtFiveMinutes(t *testing.T) {
+	if got := retryDelay(30*time.Second, 5); got != 5*time.Minute {
+		t.Fatalf("retryDelay = %s, want 5m0s", got)
 	}
 }
 

@@ -76,6 +76,7 @@ project:
   state_dir: .bookforge
 llm:
   provider: openai
+  api_format: chat_completions
   model: gpt-4.1
   api_key_env: OPENAI_API_KEY
   base_url: https://api.openai.com/v1
@@ -91,6 +92,9 @@ generation:
   editor: ""
   store_prompt_and_response: true
   invalid_output_retries: 3
+  api_error_retries: 3
+  # First retry delay; subsequent delays double up to 5m. Set to 0s to disable waiting.
+  retry_initial_delay: 30s
 quarto:
   project_dir: .
   command: quarto
@@ -194,7 +198,7 @@ func Generate(ctx context.Context, configPath string, auto bool, noAudit bool, m
 
 func runGenerate(ctx context.Context, p project, auto bool, noAudit bool, model string, lockHeld bool) error {
 	key := os.Getenv(p.config.LLM.APIKeyEnv)
-	client := &openai.Client{APIKey: key, BaseURL: p.config.LLM.BaseURL, Headers: p.config.LLM.Headers, HTTP: &http.Client{Timeout: p.config.LLM.RequestTimeout}}
+	client := &openai.Client{APIKey: key, BaseURL: p.config.LLM.BaseURL, APIFormat: p.config.LLM.APIFormat, Headers: p.config.LLM.Headers, HTTP: &http.Client{Timeout: p.config.LLM.RequestTimeout}}
 	if model != "" {
 		p.config.LLM.Model = model
 	}
@@ -209,7 +213,8 @@ func runGenerate(ctx context.Context, p project, auto bool, noAudit bool, model 
 		Options: orchestrator.Options{
 			Model: p.config.LLM.Model, Temperature: p.config.LLM.Temperature, MaxTokens: p.config.LLM.MaxOutputTokens,
 			Parameters: p.config.LLM.Parameters, AuditFull: p.config.Generation.StorePromptAndResponse,
-			InvalidOutputRetries: p.config.Generation.InvalidOutputRetries, Auto: p.config.Generation.Review == "auto",
+			InvalidOutputRetries: p.config.Generation.InvalidOutputRetries, APIErrorRetries: p.config.Generation.APIErrorRetries,
+			RetryInitialDelay: p.config.Generation.RetryInitialDelay, Auto: p.config.Generation.Review == "auto",
 			InitialHooks: p.initialHooks, SystemPrompt: p.system, LongBookRules: p.longBookRules, Inputs: p.inputs,
 			Output: os.Stderr, Editor: p.config.Generation.Editor, LockHeld: lockHeld,
 		},

@@ -11,6 +11,8 @@ project:
 
 llm:
   provider: openai
+  # chat_completions or responses
+  api_format: chat_completions
   model: gpt-4.1
   api_key_env: OPENAI_API_KEY
   base_url: https://api.openai.com/v1
@@ -28,6 +30,9 @@ generation:
   editor: ""
   store_prompt_and_response: true
   invalid_output_retries: 3
+  api_error_retries: 3
+  # First retry delay; subsequent delays double up to 5m. Set to 0s to disable waiting.
+  retry_initial_delay: 30s
 
 quarto:
   project_dir: .

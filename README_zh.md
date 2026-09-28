@@ -204,6 +204,7 @@ export OPENAI_API_KEY="你的 API Key"
 | `project.chapters_dir` | 编号 `.qmd` 输出目录 | `chapters` |
 | `project.state_dir` | manifest、快照和审计数据 | `.bookforge` |
 | `llm.provider` / `llm.model` | 模型服务和名称 | `openai` / `gpt-4.1` |
+| `llm.api_format` | OpenAI 兼容请求格式：`chat_completions` 或 `responses` | `chat_completions` |
 | `llm.api_key_env` | API Key 环境变量 | `OPENAI_API_KEY` |
 | `llm.base_url` | OpenAI 兼容 endpoint | `https://api.openai.com/v1` |
 | `llm.temperature`、`max_output_tokens`、`request_timeout` | 生成参数 | `0.7`、`12000`、`10m` |
@@ -213,9 +214,15 @@ export OPENAI_API_KEY="你的 API Key"
 | `generation.editor` | 编辑章节的编辑器命令；未配置时编辑操作会显示错误并返回审核菜单 | 空 |
 | `generation.store_prompt_and_response` | 审计中保存完整 prompt 和原始 response | `true` |
 | `generation.invalid_output_retries` | 输出无效后的额外重试次数 | `3` |
+| `generation.api_error_retries` | API 错误后的额外重试次数 | `3` |
+| `generation.retry_initial_delay` | 重试初始等待时间；之后逐次翻倍，最多五分钟，每章重置 | `30s` |
 | `quarto.project_dir` / `quarto.command` | Quarto 工作目录和可执行命令（可用 PATH 命令或绝对路径） | `.` / `quarto` |
 
 `--auto`、`--model` 和 `--no-audit-full` 只影响本次运行。`llm.parameters` 的键值会直接合并进 API 请求，BookForge 不解释其含义；若服务端拒绝参数，会展示服务端错误。API Key 不会持久化；JSON 快照和审计由工具管理，用户无需编写 JSON。
+
+临时 API 错误和模型输出格式错误都会按配置的重试次数进行指数退避。永久性 HTTP 4xx 错误（408、409、429 除外）会直接返回。将 `generation.retry_initial_delay` 设为 `0s` 可关闭等待；否则等待时间逐次翻倍，最多五分钟，并在每章成功生成后重置。
+
+使用 OpenAI 兼容的 Responses endpoint 时，将 `llm.api_format` 设为 `responses`，并将 `llm.base_url` 配置为 API 根地址（例如 `https://opencode.ai/zen/go/v1`）。BookForge 会请求 `/responses`，并解析 Responses 格式的文本和 token 用量。
 
 例如，可以直接传递模型专属参数：
 

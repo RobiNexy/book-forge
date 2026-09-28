@@ -47,6 +47,9 @@ type Options struct {
 	Parameters           map[string]any
 	AuditFull            bool
 	InvalidOutputRetries int
+	APIErrorRetries      int
+	RetryInitialDelay    time.Duration
+	WaitBeforeRetry      func(context.Context, time.Duration) error
 	Auto                 bool
 	InitialHooks         string
 	SystemPrompt         string
@@ -148,7 +151,7 @@ func (o *Orchestrator) generateOne(ctx context.Context, generation int, previous
 	if o.Options.StartedAt != nil {
 		started = o.Options.StartedAt().UTC()
 	}
-	requestAttempt, invalidCount := 0, 0
+	requestAttempt, invalidCount, apiErrorCount, backoffCount := 0, 0, 0, 0
 	var retryInstructions []string
 	formatReminderAdded := false
 	runID := fmt.Sprintf("%d-%d", started.UnixNano(), os.Getpid())
@@ -164,11 +167,23 @@ func (o *Orchestrator) generateOne(ctx context.Context, generation int, previous
 		if err != nil {
 			failure := fmt.Errorf("generate chapter %d: %w", generation, err)
 			o.logEvent("generate", generation, "api_error", failure, nil)
-			return domain.ProjectState{}, false, false, failure
+			var permanent llm.PermanentError
+			if errors.As(err, &permanent) || apiErrorCount >= o.Options.APIErrorRetries || ctx.Err() != nil {
+				return domain.ProjectState{}, false, false, failure
+			}
+			apiErrorCount++
+			backoffCount++
+			delay := retryDelay(o.Options.RetryInitialDelay, backoffCount)
+			o.logEvent("retry", generation, "api_error", failure, map[string]any{"attempt": requestAttempt, "retry_after": delay.String()})
+			if err := o.waitBeforeRetry(ctx, delay); err != nil {
+				return domain.ProjectState{}, false, false, fmt.Errorf("retry chapter %d after API error: %w", generation, err)
+			}
+			continue
 		}
 		blocks, err := parser.Split(response.Content)
 		if err != nil {
 			invalidCount++
+			backoffCount++
 			responsePath, saveErr := o.Store.SaveInvalidResponse(generation, runID, requestAttempt, response.Content, err.Error())
 			if saveErr != nil {
 				return domain.ProjectState{}, false, false, fmt.Errorf("save invalid chapter %d response: %w", generation, saveErr)
@@ -179,13 +194,18 @@ func (o *Orchestrator) generateOne(ctx context.Context, generation int, previous
 					retryInstructions = append(retryInstructions, "请注意格式：严格遵守固定输出协议，只输出一章，并使用正确且唯一的结束标记(`<<<BOOKFORGE_HOOKS>>>`或`<<<END_OF_BOOK>>>`)。")
 					formatReminderAdded = true
 				}
-				o.logEvent("retry", generation, "invalid_output", err, map[string]any{"attempt": requestAttempt, "response_file": responsePath})
+				delay := retryDelay(o.Options.RetryInitialDelay, backoffCount)
+				o.logEvent("retry", generation, "invalid_output", err, map[string]any{"attempt": requestAttempt, "response_file": responsePath, "retry_after": delay.String()})
+				if waitErr := o.waitBeforeRetry(ctx, delay); waitErr != nil {
+					return domain.ProjectState{}, false, false, fmt.Errorf("retry chapter %d after invalid output: %w", generation, waitErr)
+				}
 				continue
 			}
 			failure := fmt.Errorf("chapter %d remained invalid after %d retries; raw response saved to %s: %w", generation, o.Options.InvalidOutputRetries, responsePath, err)
 			o.logEvent("invalid_response", generation, "retry_exhausted", failure, map[string]any{"attempt": requestAttempt, "response_file": responsePath})
 			return domain.ProjectState{}, false, false, failure
 		}
+		backoffCount = 0
 		chapter := blocks.Chapter
 		acceptAll := false
 		if !autoReview {
@@ -239,6 +259,42 @@ func (o *Orchestrator) generateOne(ctx context.Context, generation int, previous
 		o.logEvent("generate", generation, "committed", nil, map[string]any{"chapter_path": record.ChapterPath, "end_of_book": blocks.EndOfBook})
 		writeChapterSummary(o.output(), generation, o.Store.ChapterPath(generation), chapter, next.CurrentHooks, next.Finished)
 		return next, blocks.EndOfBook, acceptAll, nil
+	}
+}
+
+const maxRetryDelay = 5 * time.Minute
+
+func retryDelay(initial time.Duration, retryNumber int) time.Duration {
+	if initial <= 0 || retryNumber <= 0 {
+		return 0
+	}
+	delay := initial
+	if delay > maxRetryDelay {
+		delay = maxRetryDelay
+	}
+	for i := 1; i < retryNumber && delay < maxRetryDelay; i++ {
+		if delay > maxRetryDelay/2 {
+			return maxRetryDelay
+		}
+		delay *= 2
+	}
+	return delay
+}
+
+func (o *Orchestrator) waitBeforeRetry(ctx context.Context, delay time.Duration) error {
+	if o.Options.WaitBeforeRetry != nil {
+		return o.Options.WaitBeforeRetry(ctx, delay)
+	}
+	if delay <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
